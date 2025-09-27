@@ -1,0 +1,10 @@
+22241098
+m*k=24
+loop_res=9
+m-k=5
+empty_stmt_ok
+x/k=1
+2
+y_positive
+1
+8

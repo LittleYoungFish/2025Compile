@@ -1,0 +1,171 @@
+// 1. 运行时库函数声明（必须显式声明，符合文档测试要求）
+
+// 2. 全局变量/常量声明（全为ConstExp初始化，无运行时依赖）
+const int G_CONST = 10;         // ConstDef：有初始值，编译期可求值
+int g_arr[5] = {1, 2, 3, 4, 0}; // 全局数组：含0元素（用于验证短路循环终止）
+int g_short_circuit = 0;        // 全局变量：初值0（ConstExp）
+int arr1[10];
+int has_init = G_CONST + G_CONST;
+
+int func1(int a)
+{
+    return a + 1; // 由一个形参
+}
+
+// 3. 顶层函数：短路测试（无参数，修改全局变量，符合FuncDef）
+int func2()
+{
+    g_short_circuit = 100; // LVal=Exp，符合赋值语句规则
+    return 1;
+}
+
+int func1WithArray(int arr[])
+{
+    return arr[0];
+}
+
+// 4. 顶层函数：数组求和（含&&短路，符合A级别要求）
+int arr_func(int arr[], int len)
+{
+    int sum = 0;
+    int i; // 变量声明提前，符合Block->BlockItem->Decl
+    // for循环：Cond含&&（短路逻辑），符合A级别难度要求
+    for (i = 0; i < len && arr[i] != 0; i = i + 1)
+    {
+        sum = sum + arr[i]; // 简单赋值，避免运算符解析问题
+        if (i > 5)
+        {
+            break; // 测试break，符合Stmt->'break';规则
+        }
+        else
+        {
+            continue; // 测试continue，符合Stmt->'continue';规则
+        }
+    }
+    return sum; // 有返回值，符合FuncType->int
+}
+
+void no_param_func()
+{
+    return; // void函数返回空，符合文档要求
+}
+
+// 5. 主函数（无运行时违规，全贴合文档规则）
+int main()
+{
+    int a;
+    a = 2; // 无输入  调用前已声明getint，符合函数调用规则
+    int b = 5;
+    // 修正：局部数组用常量初始化（无运行时输入依赖，避免栈异常）
+    int loc_arr[3] = {2, 5, 10};
+    // 局部static变量：初值0（ConstExp），符合static仅修饰局部规则
+    static int loc_static = 0;
+    static int loc_static2 = 3, loc_static3 = 4, loc_static5; // 多变量声明
+    int c = func1(a);                                         // 函数调用，1个参数
+
+    no_param_func();
+
+    int k;
+    for (k = 0; k < 2; k = k + 1) // 1
+    {
+        ;
+    }
+    for (; k < 4; k = k + 1) // 2
+    {
+        ;
+    }
+    for (k = 0;; k = k + 1) // 3
+    {
+        if (k > 2)
+        {
+            break;
+        }
+    }
+    for (k = 0; k < 2;) // 4
+    {
+        k = k + 1;
+    }
+    for (;; k = k + 1) // 5
+    {
+        if (k > 3)
+        {
+            break;
+        }
+    }
+    for (k = 0;;) // 6
+    {
+        if (k > 2)
+        {
+            break;
+        }
+        k = k + 1;
+    }
+    for (;;) // 7
+    {
+        if (k > 3)
+        {
+            break;
+        }
+        k = k + 1;
+    }
+    for (; k < 5;) // 8
+    {
+        k = k + 1;
+    }
+
+    // 增加空语句块
+    {
+    }
+
+    // for子句中的多个赋值
+    int m, n;
+    for (m = 0, n = 0; m < 3 && n < 3; m = m + 1, n = n + 1)
+    {
+        ;
+    }
+
+    // 逻辑或||运算
+    if (a > 1 || b < 10)
+    {
+        ;
+    }
+
+    // 括号表达式
+    int parenthesized_result = (a + b);
+    // 带操作符的一元表达式
+    int unary_result1 = +a;
+    int unary_result2 = -a;
+    int unary_result3 = !a;
+
+    printf("22241098\n"); // 1
+    // 第2条写语句：1个%d对应1个表达式（格式匹配，合规）
+    printf("%d\n", g_arr[0]);
+    // 第3条写语句：1个%d对应1个表达式（合规）
+    printf("%d\n", a + b);
+    // 第4条写语句：1个%d对应1个表达式（合规）
+    printf("%d\n", a * G_CONST);
+    // 第5条写语句：1个%d对应1个表达式（无%%，合规）
+    printf("%d\n", G_CONST % b);
+    // 第6条写语句：1个%d对应1个表达式（合规）
+    printf("%d\n", loc_arr[2]);
+    // 第7条写语句：1个%d对应1个表达式（数组传参类型匹配，合规）
+    printf("%d\n", arr_func(g_arr, 5));
+
+    // loc_static = loc_static + 3; // 简单赋值，符合ForStmt文法
+    //  第8条写语句：1个%d对应1个表达式（合规）
+    printf("%d\n", loc_static);
+
+    // 短路求值测试：0 && func2()（短路，func2不执行，符合文档样例）
+    if (0 && func2())
+    {
+        ; // 空语句，符合Stmt->[Exp];规则
+    }
+    // 第9条写语句：1个%d对应1个表达式（验证短路，合规）
+    printf("%d\n", g_short_circuit);
+
+    // 第10条写语句：1个%d对应1个表达式（关系运算，合规）
+    // printf("%d\n", a > b);
+    printf("%d\n", a);
+
+    return 0; // main返回常数0，符合文档语义约束
+}

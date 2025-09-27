@@ -1,0 +1,13 @@
+22241098
+arr[0]=4
+cnt=1
+count_arr1=40
+modified_arr[1]=2
+cnt=2
+count_arr2=34
+arr[2]=13
+cnt=3
+count_arr3=37
+i=3
+arr[3]-val=14
+2

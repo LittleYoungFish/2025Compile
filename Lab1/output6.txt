@@ -1,0 +1,10 @@
+22241098
+g_global_init=10
+g_global_new=15
+num+new_val=20
+new_val-num=10
+sum_1-4=10
+10
+cnt=5
+func_no_param=3
+g_global+func_no_param=10
