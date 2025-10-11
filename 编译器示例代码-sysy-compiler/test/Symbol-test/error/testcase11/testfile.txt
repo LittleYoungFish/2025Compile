@@ -1,7 +1,0 @@
-int main() {
-    const char a = '\'';
-    a = '\"';
-    const char s[15 = "hello world";
-    s[10] = '*';
-    return 0;
-}
