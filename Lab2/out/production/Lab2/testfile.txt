@@ -1,79 +1,8 @@
-int arr_func(int arr[], int len)
-{
-    int sum = 0;
-    int i;
-
-    for (i = 0; i < len &| arr[i] != 0; i = i + 1)
-    {
-        sum = sum + arr[i];
+int main(){
+    int c;
+    c = getint()
+    if(1 & 2){
+        printf("output is %d\n", c);
     }
-    return sum;
-}
-
-int main()
-{
-    int a;
-    a = 2; // 无输入  调用前已声明getint，符合函数调用规则
-    int b = 5;
-    // 修正：局部数组用常量初始化（无运行时输入依赖，避免栈异常）
-    int loc_arr[3] = {2, 5, 10};
-    // 局部static变量：初值0（ConstExp），符合static仅修饰局部规则
-    static int loc_static = 0;
-    static int loc_static2 = 3, loc_static3 = 4, loc_static5; // 多变量声明
-    int c = func1(a);                                         // 函数调用，1个参数
-
-    no_param_func();
-
-
-    // for子句中的多个赋值
-    int m, n;
-    for (m = 0, n = 0; m < 3 & n < 3; m = m + 1, n = n + 1)
-    {
-        ;
-    }
-
-    // 逻辑或||运算
-    if (a > 1 | b < 10)
-    {
-        ;
-    }
-
-    // 括号表达式
-    int parenthesized_result = (a + b);
-    // 带操作符的一元表达式
-    int unary_result1 = +a;
-    int unary_result2 = -a;
-    int unary_result3 = !a;
-
-    printf("22241098\n"); // 1
-    // 第2条写语句：1个%d对应1个表达式（格式匹配，合规）
-    printf("%d\n", g_arr[0]);
-    // 第3条写语句：1个%d对应1个表达式（合规）
-    printf("%d\n", a + b);
-    // 第4条写语句：1个%d对应1个表达式（合规）
-    printf("%d\n", a * G_CONST);
-    // 第5条写语句：1个%d对应1个表达式（无%%，合规）
-    printf("%d\n", G_CONST % b);
-    // 第6条写语句：1个%d对应1个表达式（合规）
-    printf("%d\n", loc_arr[2]);
-    // 第7条写语句：1个%d对应1个表达式（数组传参类型匹配，合规）
-    printf("%d\n", arr_func(g_arr, 5));
-
-    // loc_static = loc_static + 3; // 简单赋值，符合ForStmt文法
-    //  第8条写语句：1个%d对应1个表达式（合规）
-    printf("%d\n", loc_static);
-
-    // 短路求值测试：0 && func2()（短路，func2不执行，符合文档样例）
-    if (0 && func2())
-    {
-        ; // 空语句，符合Stmt->[Exp];规则
-    }
-    // 第9条写语句：1个%d对应1个表达式（验证短路，合规）
-    printf("%d\n", g_short_circuit);
-
-    // 第10条写语句：1个%d对应1个表达式（关系运算，合规）
-    // printf("%d\n", a > b);
-    printf("%d\n", a);
-
-    return 0; // main返回常数0，符合文档语义约束
+    return 0;
 }

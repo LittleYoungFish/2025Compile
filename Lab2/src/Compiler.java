@@ -1,9 +1,12 @@
 import error.CompileError;
 import error.ErrorRecorder;
 import exception.LexerException;
-import frontend.Lexer;
-import frontend.Token;
-import frontend.TokenList;
+import exception.ParserException;
+import frontend.lexer.Lexer;
+import frontend.lexer.Token;
+import frontend.lexer.TokenList;
+import frontend.parser.Parser;
+import frontend.parser.node.Node;
 
 import java.io.*;
 
@@ -11,14 +14,18 @@ public class Compiler {
     private static ErrorRecorder errorRecorder = new ErrorRecorder();
     private static TokenList tokenList = new TokenList();
 
-    public static void main(String[] args) throws IOException{
-        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        String filePath = "testfile.txt";
-        //输入的代码文件
+    public static void main(String[] args) throws IOException, ParserException, LexerException {
+        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        //String filePath = "testfile.txt";
+        // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
+        // 分词器
         Lexer lexer = new Lexer(new InputStreamReader(fileInputStream), errorRecorder);
 
-        printLexerResult(lexer);
+        //printLexerResult(lexer);
+
+        parser(lexer);
+        printError();
     }
 
     public static void lexer(Lexer lexer) throws LexerException, IOException {
@@ -61,4 +68,40 @@ public class Compiler {
         }
     }
 
+    public static void parser(Lexer lexer) throws IOException, LexerException, LexerException, ParserException {
+        try(
+            FileOutputStream fileOutputStream = new FileOutputStream("parser.txt")){
+            PrintStream out = new PrintStream(fileOutputStream);
+            Parser parser = new Parser(lexer, errorRecorder);
+            Node result = parser.parse();
+
+            result.walk(
+                    out::println,
+                    nonTerminalSymbol -> {
+                        String type = nonTerminalSymbol.getType();
+                        if(!type.equals("BlockItem")
+                            && !type.equals("Decl")
+                            && !type.equals("BType")
+                        ){
+                            out.println(nonTerminalSymbol);
+                        }
+                    }
+            );
+        }
+    }
+
+    public static void printError() throws IOException{
+        try(
+                FileOutputStream errorOutputStream = new FileOutputStream("error.txt");
+                PrintStream errorPrintStream = new PrintStream(errorOutputStream);
+        ) {
+            //错误信息
+            if(errorRecorder.hasErrors()){
+                for(CompileError error : errorRecorder.getErrors()){
+                    errorPrintStream.printf("%d %s\n", error.getLineNum(), error.getType());
+                }
+            }
+            errorPrintStream.flush();
+        }
+    }
 }
