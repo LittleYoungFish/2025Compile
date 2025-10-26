@@ -1,8 +1,6 @@
-int main(){
-    int c;
-    c = getint()
-    if(1 & 2){
-        printf("output is %d\n", c);
-    }
+int main()
+{
+    int a = 2;
+    int unary_result3 = !a;
     return 0;
 }

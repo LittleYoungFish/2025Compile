@@ -14,7 +14,9 @@ public enum TokenType {
     ELSETK("else"), //else
     NOT("!"), // !
     AND("&&"), // &&
+    SINGLE_AND("&"),
     OR("||"), // ||
+    SINGLE_OR("|"),
     FORTK("for"), // for
     RETURNTK("return"), //return
     VOIDTK("void"), //void

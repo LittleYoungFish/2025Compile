@@ -137,8 +137,11 @@ public class Lexer {
                 token = new Token(content, tokenType, lineNum);
             }else{
                 //错误处理
-                errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
-                return next();
+                //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
+                content = builder.toString();
+                tokenType = TokenType.SINGLE_AND;
+                token = new Token(content, tokenType, lineNum);
+                //return next();
             }
         } else if (c == '|') {
             c = getChar();
@@ -149,8 +152,11 @@ public class Lexer {
                 token = new Token(content, tokenType, lineNum);
             }else {
                 //错误处理
-                errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
-                return next();
+                //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
+                content = builder.toString();
+                tokenType = TokenType.SINGLE_OR;
+                token = new Token(content, tokenType, lineNum);
+                //return next();
             }
         } else if (c == '+') {
             content = builder.toString();

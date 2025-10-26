@@ -24,6 +24,7 @@ public class Compiler {
 
         //printLexerResult(lexer);
 
+        // 语法分析
         parser(lexer);
         printError();
     }

@@ -112,7 +112,7 @@ public class Parser {
             declForConst.constDecl = (ConstDecl) result.getSubtree();
 
             decl = declForConst;
-        } else if (isMatch(currToken, TokenType.INTTK)) {
+        } else if (isMatch(currToken, TokenType.INTTK) || isMatch(currToken, TokenType.STATICTK)) {
             // Decl → VarDecl
             Decl declForVar = new Decl(2);
 
@@ -238,7 +238,7 @@ public class Parser {
 
     // VarDecl解析器 VarDecl → [ 'static' ] BType VarDef { ',' VarDef } ';'
     private ParseResult parseVarDecl(Token currToken) throws ParserException, IOException, LexerException {
-        VarDecl varDecl = new VarDecl();
+        VarDecl varDecl;
         ParseResult result;
 
         // static 可选
@@ -318,6 +318,7 @@ public class Parser {
             || isMatch(currToken, TokenType.INTCON)
             || isMatch(currToken, TokenType.PLUS)
             || isMatch(currToken, TokenType.MINU)
+                || isMatch(currToken, TokenType.NOT)
         ){
             InitVal initValSingle = new InitVal(1);
 
@@ -760,7 +761,7 @@ public class Parser {
         BlockItem blockItem;
         ParseResult result;
 
-        if(isMatch(currToken, TokenType.INTTK) || isMatch(currToken, TokenType.CONSTTK)){
+        if(isMatch(currToken, TokenType.INTTK) || isMatch(currToken, TokenType.CONSTTK) || isMatch(currToken, TokenType.STATICTK)){
             // BlockItem → Decl
             blockItem = new BlockItem(1);
 
@@ -811,6 +812,7 @@ public class Parser {
                 || isMatch(currToken, TokenType.INTCON)
                 || isMatch(currToken, TokenType.PLUS)
                 || isMatch(currToken, TokenType.MINU)
+                    || isMatch(currToken, TokenType.NOT)
             ){
                 stmt = new Stmt(1);
                 
@@ -892,7 +894,7 @@ public class Parser {
             currToken = parseToken(currToken, TokenType.LPARENT, new ParserException());
             if (isMatch(currToken, TokenType.IDENFR)){
                 result = parseForStmt(currToken);
-                currToken = buf.readNextToken();
+                currToken = result.getNextToken();
                 stmt.forStmt1 = (ForStmt) result.getSubtree();
             }
 
@@ -902,6 +904,7 @@ public class Parser {
                 errorRecorder.addError(ErrorType.SEMICN_MISS, buf.readPreToken().getLineNum());
             }
 
+            // [Cond]
             if (isMatch(currToken, TokenType.LPARENT)
                 || isMatch(currToken, TokenType.IDENFR)
                 || isMatch(currToken, TokenType.INTCON)
@@ -922,7 +925,7 @@ public class Parser {
 
             if (isMatch(currToken, TokenType.IDENFR)){
                 result = parseForStmt(currToken);
-                currToken = buf.readNextToken();
+                currToken = result.getNextToken();
                 stmt.forStmt2 = (ForStmt) result.getSubtree();
             }
 
@@ -1074,7 +1077,10 @@ public class Parser {
         LOrExp lOrExp = new LOrExp(1);
         lOrExp.lAndExp1 = (LAndExp) result.getSubtree();
 
-        while (isMatch(currToken, TokenType.OR)){
+        while (isMatch(currToken, TokenType.OR) || isMatch(currToken, TokenType.SINGLE_OR)){
+            if (!isMatch(currToken, TokenType.OR)){
+                errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, currToken.getLineNum());
+            }
             currToken = buf.readNextToken();
 
             result = parseLAndExp(currToken);
@@ -1101,7 +1107,10 @@ public class Parser {
         LAndExp lAndExp = new LAndExp(1);
         lAndExp.eqExp1 = (EqExp) result.getSubtree();
 
-        while (isMatch(currToken, TokenType.AND)){
+        while (isMatch(currToken, TokenType.AND) || isMatch(currToken, TokenType.SINGLE_AND)){
+            if (!isMatch(currToken, TokenType.AND)){
+                errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, currToken.getLineNum());
+            }
             currToken = buf.readNextToken();
 
             result = parseEqExp(currToken);
