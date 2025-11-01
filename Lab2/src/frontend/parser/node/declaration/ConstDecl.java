@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef }
+ * 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
  */
 public class ConstDecl extends Node {
     public BType type;

@@ -50,6 +50,7 @@ public class Lexer {
         builder.append((char) c); //先加进去builder
 
         //关键字或标识符
+        // 字母或下划线（可做标识符开头）
         if(isLetter(c)){
             c = getChar();
             while(isLetter(c) || isDigit(c)){
@@ -60,9 +61,10 @@ public class Lexer {
             backChar(c);
             content = builder.toString();//具体内容
             // 是否为关键字，否则为标识符
+            // 找对应的类型，没找到默认IDENFR（标识符）
             tokenType = keyWordTable.getOrDefault(content, TokenType.IDENFR);
             token = new Token(content, tokenType, lineNum);
-        } else if (isPositiveDigit(c)) {// 数字
+        } else if (isPositiveDigit(c)) {// 数字（非0）
             c = getChar();
             while(isDigit(c)){
                 builder.append((char) c);
@@ -72,11 +74,11 @@ public class Lexer {
             content = builder.toString();
             tokenType = TokenType.INTCON;
             token = new Token(content, tokenType, lineNum);
-        } else if (c == '0') { // 数字0
+        } else if (c == '0') { // 开头是数字0
             content = builder.toString(); // 0
             tokenType = TokenType.INTCON;
             token = new Token(content, tokenType, lineNum);
-        } else if (c == '\"') { //字符串常量
+        } else if (c == '\"') { //双引号" 字符串常量
             c = getChar();
             while (c != EOF && c != '\"'){
                 builder.append((char) c);
@@ -85,14 +87,13 @@ public class Lexer {
                     c = getChar();
                     if (c == 'd') {
                         builder.append((char) c);
-                    }else { //不合法
+                    }else { //不合法（词法分析不会出现此处错误）
                         builder.append((char) c);
-                        //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
                     }
                     if(c == '\"'){
                         break; //字符串结束
                     }
-                } else if (c == '\\') {
+                } else if (c == '\\') { // 斜杠\
                     c = getChar();
                     if (c == 'n') {
                         builder.append((char) c);
@@ -103,7 +104,7 @@ public class Lexer {
                     if(c == '\"'){
                         break;
                     }
-                } else if (!isNormalLetter(c)) {
+                } else if (!isNormalLetter(c)) { // 词法分析不会出现非法字符错误
                     //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
                 }
                 c= getChar();
@@ -138,6 +139,10 @@ public class Lexer {
             }else{
                 //错误处理
                 //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
+                // 错误处理加到语法分析中
+                // 回退字符
+                // 没有符合的字符类型创造一个非法类型，否则语法分析识别不到该字符
+                backChar(c);
                 content = builder.toString();
                 tokenType = TokenType.SINGLE_AND;
                 token = new Token(content, tokenType, lineNum);
@@ -153,6 +158,7 @@ public class Lexer {
             }else {
                 //错误处理
                 //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
+                backChar(c);
                 content = builder.toString();
                 tokenType = TokenType.SINGLE_OR;
                 token = new Token(content, tokenType, lineNum);
@@ -193,7 +199,7 @@ public class Lexer {
                     }
                 }
                 backChar(c);
-            } else if (c == '/') {
+            } else if (c == '/') { // 单行注释
                 builder.append((char) c);
                 c = getChar();
                 while (c != EOF && c != '\n'){
@@ -303,11 +309,12 @@ public class Lexer {
      * @return
      */
     private int getChar() throws IOException {
-        //需要回退
+        //有回退的字符优先读取回退的字符（字符相当于进行了缓存）
         if (hasBackChar) {
-            hasBackChar = false;
+            hasBackChar = false; // 清除回退的字符
             return backChar;//回退的字符
         }else {
+            // 没有缓存的回退字符则正常读取
             int nextChar = reader.read();// 下一个字符
             return nextChar;
         }
@@ -319,6 +326,7 @@ public class Lexer {
      * @throws IOException
      */
     private void backChar(int c) throws IOException {
+        // 相当于将需要回退的字符缓存起来，下次getchar优先读取
         hasBackChar = true;
         backChar = c;
     }
@@ -342,10 +350,12 @@ public class Lexer {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c == '_');
     }
 
+    // 32空格 33感叹号 排除了34（双引号 "）、35（井号 #）、36（美元符 $）、37（百分号 %）、38（与号 &）、39（单引号 '）
     private static boolean isNormalLetter(int c){
         return c == 32 || c == 33 || (c >= 40 && c <= 126);
     }
 
+    // 除换行符以外的空白符
     private static boolean isWhitespaceWithoutLine(int c){
         return Character.isWhitespace(c) && c != '\n';
     }

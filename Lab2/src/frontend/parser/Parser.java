@@ -42,6 +42,7 @@ public class Parser {
         }
     }
     private Token parseToken(Token token, TokenType type, ParserException onFail) throws LexerException, ParserException, IOException {
+        // parseToken 内部会调用 readNextToken() 推进到下一个 Token
         matchOrThrow(token, type, onFail);
         return buf.readNextToken();
     }

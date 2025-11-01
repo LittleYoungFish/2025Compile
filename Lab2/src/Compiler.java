@@ -15,8 +15,8 @@ public class Compiler {
     private static TokenList tokenList = new TokenList();
 
     public static void main(String[] args) throws IOException, ParserException, LexerException {
-        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        //String filePath = "testfile.txt";
+        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        String filePath = "testfile.txt";
         // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
         // 分词器
@@ -77,8 +77,9 @@ public class Compiler {
             Node result = parser.parse();
 
             result.walk(
-                    out::println,
-                    nonTerminalSymbol -> {
+                    // Consumer 负责遇到节点时“做什么”
+                    out::println, // 对终端符号的操作是 out::println（打印终端符号到文件）
+                    nonTerminalSymbol -> { // 对非终端符号的操作是 “过滤掉 BlockItem、Decl、BType 后打印”
                         String type = nonTerminalSymbol.getType();
                         if(!type.equals("BlockItem")
                             && !type.equals("Decl")

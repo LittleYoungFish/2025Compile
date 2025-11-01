@@ -14,7 +14,7 @@ import java.util.function.Consumer;
  * 编译单元 CompUnit → {Decl} {FuncDef} MainFuncDef
  */
 public class CompUnit extends Node {
-    public List<Decl> decls = new ArrayList<>();
+    public List<Decl> decls = new ArrayList<>(); // 可能有多个
     public List<FuncDef> funcDefs = new ArrayList<>();
     public MainFuncDef mainFuncDef;
 
@@ -26,6 +26,7 @@ public class CompUnit extends Node {
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
         for (Decl decl : decls) {
+            // 对每个子节点遍历
             decl.walk(terminalConsumer, nonTerminalConsumer);
         }
         for (FuncDef funcDef : funcDefs) {

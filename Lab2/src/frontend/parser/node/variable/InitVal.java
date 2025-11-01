@@ -40,10 +40,12 @@ public class InitVal extends Node {
             terminalConsumer.accept(new TerminalSymbol(TokenType.LBRACE));
 
             boolean first = true;
+            // exps为空则不会进入
             for (Exp exp : exps) {
                 if (first) {
                     first = false;
                 }else {
+                    // 先处理逗号,
                     terminalConsumer.accept(new TerminalSymbol(TokenType.COMMA));
                 }
                 exp.walk(terminalConsumer, nonTerminalConsumer);

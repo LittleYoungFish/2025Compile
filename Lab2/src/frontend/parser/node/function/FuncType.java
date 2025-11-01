@@ -20,7 +20,7 @@ public class FuncType extends Node {
 
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
-        terminalConsumer.accept(new TerminalSymbol(type));
+        terminalConsumer.accept(new TerminalSymbol(type)); // 和type有关
         nonTerminalConsumer.accept(new NonTerminalSymbol(this));
     }
 }

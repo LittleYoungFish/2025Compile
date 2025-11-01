@@ -12,7 +12,6 @@ import java.util.function.Consumer;
 public class Exp extends Node {
     public AddExp addExp;
 
-
     @Override
     public String getType() {
         return "Exp";
@@ -21,7 +20,6 @@ public class Exp extends Node {
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
         addExp.walk(terminalConsumer, nonTerminalConsumer);
-
         nonTerminalConsumer.accept(new NonTerminalSymbol(this));
     }
 }

@@ -34,7 +34,8 @@ public class PreReadBuffer {
         }
     }
 
-    // 读取下一个token
+    // 读取下一个token（会推进解析位置）
+    // 从缓冲中读取 “当前要处理的下一个 Token”，并更新缓冲状态，是解析器获取 Token 的主要入口。
     public Token readNextToken() throws LexerException, IOException {
         preToken = tokenBuf[currTokenPos]; //记录当前token为上一个处理的token，即preToken
 
@@ -50,12 +51,15 @@ public class PreReadBuffer {
     }
 
     //按偏移量读取token
+    // 当前 Token 对应多条语法规则，且这些规则的 “公共前缀” 仅靠当前 Token 无法区分时，必须预读后续 Token 才能确定具体要解析的产生式。
+    // 读取 “当前 Token 之后第 offset 个 Token”（不推进解析指针），用于解决 “短歧义”（仅需预读 1~2 个 Token 即可区分语法规则）。
     public Token readTokenByOffset(int offset) {
         assert offset < tokenBufLen;
         return tokenBuf[(currTokenPos + offset) % tokenBufLen];
     }
 
     // 查找token，在缓冲中查找目标令牌find，如果遇到until则停止查找
+    // 从当前位置开始，向后查找目标 Token（find），直到遇到终止 Token（until）为止，用于解决 “长歧义”（需要预读超过缓冲池大小的 Token 才能判断）。
     public boolean findUntil(TokenType find, TokenType until) throws LexerException, IOException {
         for (int i = 0, j = currTokenPos; i < tokenBufLen; i++, j = (currTokenPos + 1) % tokenBufLen) {
             if (tokenBuf[j].getTokenType() == find) {

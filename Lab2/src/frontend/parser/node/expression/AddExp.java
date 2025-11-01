@@ -19,7 +19,7 @@ public class AddExp extends Node {
 
     // 2. AddExp → AddExp ('+' | '−') MulExp
     public AddExp addExp;
-    public TokenType op;
+    public TokenType op; // 需要一个type来识别是哪个操作符
     public MulExp mulExp2;
 
     public AddExp(int uType) {

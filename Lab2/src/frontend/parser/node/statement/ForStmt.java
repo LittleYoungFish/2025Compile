@@ -25,7 +25,7 @@ public class ForStmt extends Node {
 
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
-        // 处理第一个 LVal = Exp
+        // 处理第一个 LVal = Exp 一定有一个
         lVals.get(0).walk(terminalConsumer, nonTerminalConsumer);
         terminalConsumer.accept(new TerminalSymbol(TokenType.ASSIGN));
         exps.get(0).walk(terminalConsumer, nonTerminalConsumer);

@@ -29,7 +29,7 @@ public class Stmt extends Node {
     public LVal lVal;
     public Exp exp1;
     // 2. Stmt → [Exp] ';'
-    public Exp exp2;
+    public Exp exp2; // 可空
     // 3. Stmt → Block
     public Block block;
     // 4. Stmt → 'if' '(' Cond ')' Stmt [ 'else' Stmt ]
@@ -42,7 +42,7 @@ public class Stmt extends Node {
     public ForStmt forStmt2;
     public Stmt stmt;
     // 6. Stmt -> 'break' ';' Stmt -> 'continue' ';'
-    public TokenType type;
+    public TokenType type; // 类型
     public int tkLineNum = -1;
     // 7. Stmt -> 'return' [Exp] ';'
     public Exp exp3;
@@ -67,6 +67,7 @@ public class Stmt extends Node {
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
         if(UType == 1){
+            // 1. Stmt → LVal '=' Exp ';'
             lVal.walk(terminalConsumer, nonTerminalConsumer);
             terminalConsumer.accept(new TerminalSymbol(TokenType.ASSIGN));
             exp1.walk(terminalConsumer, nonTerminalConsumer);
@@ -74,16 +75,19 @@ public class Stmt extends Node {
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         }else if(UType == 2){
-            if(exp2 != null){
+            // 2. Stmt → [Exp] ';'
+            if(exp2 != null){ // 可以空
                 exp2.walk(terminalConsumer, nonTerminalConsumer);
             }
             terminalConsumer.accept(new TerminalSymbol(TokenType.SEMICN));
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         }else if(UType == 3){
+            // 3. Stmt → Block
             block.walk(terminalConsumer, nonTerminalConsumer);
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         }else if(UType == 4){
+            // 4. Stmt → 'if' '(' Cond ')' Stmt [ 'else' Stmt ]
             terminalConsumer.accept(new TerminalSymbol(TokenType.IFTK));
             terminalConsumer.accept(new TerminalSymbol(TokenType.LPARENT));
 
@@ -100,6 +104,7 @@ public class Stmt extends Node {
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         } else if (UType == 5) {
+            // 5. Stmt -> 'for' '(' [ForStmt] ';' [Cond] ';' [ForStmt] ')' Stmt
             terminalConsumer.accept(new TerminalSymbol(TokenType.FORTK));
             terminalConsumer.accept(new TerminalSymbol(TokenType.LPARENT));
             if (forStmt1 != null) {
@@ -118,11 +123,13 @@ public class Stmt extends Node {
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         } else if (UType == 6) {
-            terminalConsumer.accept(new TerminalSymbol(type));
+            // 6. Stmt -> 'break' ';' Stmt -> 'continue' ';'
+            terminalConsumer.accept(new TerminalSymbol(type)); // 根据类型来创建实体
             terminalConsumer.accept(new TerminalSymbol(TokenType.SEMICN));
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         } else if (UType == 7) {
+            // 7. Stmt -> 'return' [Exp] ';'
             terminalConsumer.accept(new TerminalSymbol(TokenType.RETURNTK));
 
             if (exp3 != null) {
@@ -133,6 +140,7 @@ public class Stmt extends Node {
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         } else if (UType == 8) {
+            // 8. Stmt -> 'printf''('StringConst {','Exp}')'';'
             terminalConsumer.accept(new TerminalSymbol(TokenType.PRINTFTK));
             terminalConsumer.accept(new TerminalSymbol(TokenType.LPARENT));
             terminalConsumer.accept(new TerminalSymbol(TokenType.STRCON, stringConst));

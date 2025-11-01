@@ -20,6 +20,7 @@ public class Number extends Node {
 
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
+        // accept 方法是连接 “语法树节点” 和 “节点处理逻辑” 的桥梁，接收一个节点对象作为参数，然后调用 Consumer 中定义的具体操作来处理这个节点。
         terminalConsumer.accept(new TerminalSymbol(TokenType.INTCON, intConst));
         nonTerminalConsumer.accept(new NonTerminalSymbol(this));
     }

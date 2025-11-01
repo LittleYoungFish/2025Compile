@@ -14,7 +14,7 @@ import java.util.function.Consumer;
  */
 public class Block extends Node {
     public List<BlockItem> blockItems = new ArrayList<>();
-    public int blockRLineNum = -1;
+    public int blockRLineNum = -1; // 右花括号位置
 
     @Override
     public String getType() {

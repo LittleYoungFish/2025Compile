@@ -54,6 +54,7 @@ public class UnaryExp extends Node {
 
             nonTerminalConsumer.accept(new NonTerminalSymbol(this));
         } else if (UType == 3) {
+            // UnaryOp不是终结符，需要walk
             unaryOp.walk(terminalConsumer, nonTerminalConsumer);
             unaryExp.walk(terminalConsumer, nonTerminalConsumer);
 

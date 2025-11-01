@@ -27,6 +27,7 @@ public class VarDef extends Node {
 
     @Override
     public void walk(Consumer<TerminalSymbol> terminalConsumer, Consumer<NonTerminalSymbol> nonTerminalConsumer) {
+        // 可合并
         terminalConsumer.accept(new TerminalSymbol(TokenType.IDENFR, ident));
 
         for (ConstExp dimension : dimensions) {
