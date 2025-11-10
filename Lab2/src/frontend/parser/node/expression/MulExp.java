@@ -26,6 +26,10 @@ public class MulExp extends Node {
         UType = uType;
     }
 
+    public int getUType() {
+        return UType;
+    }
+
     @Override
     public String getType() {
         return "MulExp";

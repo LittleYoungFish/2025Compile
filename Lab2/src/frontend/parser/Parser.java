@@ -36,15 +36,17 @@ public class Parser {
     private static boolean isNotMatch(Token token, TokenType type) {
         return token.getTokenType() != type;
     }
+    // 当语法规则要求必须出现某个 Token（缺失则为语法错误）时，用于强制校验。
     private static void matchOrThrow(Token token, TokenType type, ParserException e) throws ParserException {
         if (isNotMatch(token, type)) {
             throw e;
         }
     }
+    // 直接匹配单个固定 Token 验证当前 Token 是否为目标类型，匹配成功则直接推进到下一个 Token，失败则抛出异常
     private Token parseToken(Token token, TokenType type, ParserException onFail) throws LexerException, ParserException, IOException {
         // parseToken 内部会调用 readNextToken() 推进到下一个 Token
         matchOrThrow(token, type, onFail);
-        return buf.readNextToken();
+        return buf.readNextToken(); // 返回下一个Token
     }
 
     public Node parse() throws LexerException, ParserException, IOException {
@@ -62,24 +64,24 @@ public class Parser {
         ParseResult result;
         Token preRead, prePreRead;
 
-        // Decl
+        // Decl  int a | int a()  共有三个字符（当前字符、预读第一个、预读第二个）
         preRead = buf.readTokenByOffset(1);
         prePreRead = buf.readTokenByOffset(2);
         while (isMatch(currToken, TokenType.CONSTTK)
         || (isMatch(currToken, TokenType.INTTK)
                 && isMatch(preRead, TokenType.IDENFR)
-                && isNotMatch(prePreRead, TokenType.LPARENT))
+                && isNotMatch(prePreRead, TokenType.LPARENT))  // const int | int a
         ){
-            result = parseDecl(currToken);
-            currToken = result.getNextToken();
-            compUnit.decls.add((Decl) result.getSubtree());
+            result = parseDecl(currToken); // 进入内部再解析
+            currToken = result.getNextToken(); // 返回 “解析完当前语法结构后的下一个待解析 Token”
+            compUnit.decls.add((Decl) result.getSubtree()); // 返回 “当前语法结构对应的语法树节点” 用于组装成完整的抽象语法树
 
             preRead = buf.readTokenByOffset(1);
             prePreRead = buf.readTokenByOffset(2);
         }
 
         // FuncDef
-        preRead = buf.readTokenByOffset(1);
+        preRead = buf.readTokenByOffset(1); // void 只能是FuncDef 上面情况不符合
         while (isMatch(currToken, TokenType.VOIDTK)
         || (isMatch(currToken, TokenType.INTTK)
                 && isMatch(preRead, TokenType.IDENFR))
@@ -134,6 +136,7 @@ public class Parser {
         ConstDecl constDecl = new ConstDecl();
         ParseResult result;
 
+        // 消耗并推进Token
         currToken = parseToken(currToken, TokenType.CONSTTK, new ParserException());
 
         result = parseBType(currToken);
@@ -144,6 +147,7 @@ public class Parser {
         currToken = result.getNextToken();
         constDecl.constDefs.add((ConstDef) result.getSubtree());
 
+        // 可以有多个
         while (isMatch(currToken, TokenType.COMMA)){
             currToken = buf.readNextToken();
 
@@ -167,7 +171,7 @@ public class Parser {
         ConstDef constDef = new ConstDef();
         ParseResult result;
 
-        constDef.ident = currToken.getTokenContent();
+        constDef.ident = currToken.getTokenContent(); // 标识符具体内容
         constDef.identLineNum = currToken.getLineNum();
         currToken = parseToken(currToken, TokenType.IDENFR, new ParserException());
         while (isMatch(currToken, TokenType.LBRACK)){
@@ -197,11 +201,13 @@ public class Parser {
         ConstInitVal constInitVal;
         ParseResult result;
 
+        // '('Exp')' | LVal | Number
         if(isMatch(currToken, TokenType.LPARENT)
             || isMatch(currToken, TokenType.IDENFR)
             || isMatch(currToken, TokenType.INTCON)
             || isMatch(currToken, TokenType.PLUS)
             || isMatch(currToken, TokenType.MINU)
+                || isMatch(currToken, TokenType.NOT)
         ){
             ConstInitVal constInitValSingle = new ConstInitVal(1);
 
@@ -298,6 +304,7 @@ public class Parser {
             }
         }
 
+        // 前面结构相同
         if (isMatch(currToken, TokenType.ASSIGN)){
             currToken = buf.readNextToken();
 
@@ -435,7 +442,7 @@ public class Parser {
             newMulExp.unaryExp2 = nextUnaryExp; // 右侧的 UnaryExp
 
             // 更新 mulExp 为新节点，用于下一轮循环的左侧表达式
-            mulExp = newMulExp;
+            mulExp = newMulExp; // ***更新左侧为原来的节点
         }
 
         return new ParseResult(currToken, mulExp);
@@ -707,11 +714,13 @@ public class Parser {
         currToken = parseToken(currToken, TokenType.IDENFR, new ParserException());
 
         while (isMatch(currToken, TokenType.LBRACK)) {
+            // 可能出现缺少]但是仍需要记录为数组
+            funcFParam.count++;
             currToken = buf.readNextToken(); // 消耗[
 
             if (isMatch(currToken, TokenType.RBRACK)) {
                 currToken = buf.readNextToken();
-                funcFParam.count++; // 记录一对[]
+                //funcFParam.count++; // 记录一对[]
             }else {
                 errorRecorder.addError(ErrorType.RBRACK_MISS, buf.readPreToken().getLineNum());
             }
@@ -798,7 +807,7 @@ public class Parser {
 
         Token preRead = buf.readTokenByOffset(1);
 
-        // Stmt → LVal '=' Exp ';'
+        // Stmt → LVal '=' Exp ';'  IDENFR后不一定是 =
         if(isMatch(currToken, TokenType.IDENFR)
                 && (buf.findUntil(TokenType.ASSIGN, TokenType.SEMICN))
         ){
@@ -835,6 +844,7 @@ public class Parser {
             || isMatch(currToken, TokenType.INTCON)
             || isMatch(currToken, TokenType.PLUS)
             || isMatch(currToken, TokenType.MINU)
+                || isMatch(currToken, TokenType.NOT)
         ){
             // Stmt → [Exp] ';' Exp存在
             stmt = new Stmt(2);
@@ -976,6 +986,7 @@ public class Parser {
                     || isMatch(currToken, TokenType.INTCON)
                     || isMatch(currToken, TokenType.PLUS)
                     || isMatch(currToken, TokenType.MINU)
+                    || isMatch(currToken, TokenType.NOT)
             ){
               result = parseExp(currToken);
               currToken = result.getNextToken();

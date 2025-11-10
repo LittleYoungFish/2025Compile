@@ -26,6 +26,10 @@ public class VarDecl extends Node {
         UType = uType;
     }
 
+    public int getUType() {
+        return UType;
+    }
+
     @Override
     public String getType() {
         return "VarDecl";

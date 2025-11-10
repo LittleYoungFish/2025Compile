@@ -6,9 +6,15 @@ import frontend.lexer.Lexer;
 import frontend.lexer.Token;
 import frontend.lexer.TokenList;
 import frontend.parser.Parser;
+import frontend.parser.node.CompUnit;
 import frontend.parser.node.Node;
+import frontend.symtable.SymbolTable;
+import frontend.visitor.Visitor;
 
 import java.io.*;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 public class Compiler {
     private static ErrorRecorder errorRecorder = new ErrorRecorder();
@@ -23,9 +29,16 @@ public class Compiler {
         Lexer lexer = new Lexer(new InputStreamReader(fileInputStream), errorRecorder);
 
         //printLexerResult(lexer);
+        // 语法分析器
+        Parser parser = new Parser(lexer, errorRecorder);
 
         // 语法分析
-        parser(lexer);
+        //parser(parser);
+        //parser.parse();
+
+        // 语义分析
+        visit(parser);
+
         printError();
     }
 
@@ -69,11 +82,10 @@ public class Compiler {
         }
     }
 
-    public static void parser(Lexer lexer) throws IOException, LexerException, LexerException, ParserException {
+    public static void parser(Parser parser) throws IOException, LexerException, LexerException, ParserException {
         try(
             FileOutputStream fileOutputStream = new FileOutputStream("parser.txt")){
             PrintStream out = new PrintStream(fileOutputStream);
-            Parser parser = new Parser(lexer, errorRecorder);
             Node result = parser.parse();
 
             result.walk(
@@ -92,6 +104,29 @@ public class Compiler {
         }
     }
 
+    public static void visit(Parser parser) throws FileNotFoundException {
+        try(
+                FileOutputStream fileOutputStream = new FileOutputStream("symbol.txt")
+        ){
+            PrintStream out = new PrintStream(fileOutputStream);
+            Node result = parser.parse(); // 进行语义分析
+
+            Visitor visitor = new Visitor(errorRecorder);
+            SymbolTable symbolTable = visitor.visitCompUnit((CompUnit) result);
+
+            // 全局作用域序号为1
+            int[] initScopeId = {1};
+            symbolTable.printSymbolTable(out, 0, initScopeId);
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (ParserException e) {
+            throw new RuntimeException(e);
+        } catch (LexerException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static void printError() throws IOException{
         try(
                 FileOutputStream errorOutputStream = new FileOutputStream("error.txt");
@@ -99,7 +134,12 @@ public class Compiler {
         ) {
             //错误信息
             if(errorRecorder.hasErrors()){
-                for(CompileError error : errorRecorder.getErrors()){
+                // 获取错误列表并按行号升序排序
+                List<CompileError> errors = errorRecorder.getErrors();
+                Collections.sort(errors, Comparator.comparingInt(CompileError::getLineNum));
+
+                // 遍历输出排序后的错误
+                for (CompileError error : errors) {
                     errorPrintStream.printf("%d %s\n", error.getLineNum(), error.getType());
                 }
             }

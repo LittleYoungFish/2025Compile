@@ -104,8 +104,6 @@ public class Lexer {
                     if(c == '\"'){
                         break;
                     }
-                } else if (!isNormalLetter(c)) { // 词法分析不会出现非法字符错误
-                    //errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, lineNum);
                 }
                 c= getChar();
             }
@@ -193,7 +191,7 @@ public class Lexer {
                         builder.append((char) c);
                         c = getChar();
                     }
-                    if(c == '/'){
+                    if(c == '/'){ // 结尾
                         builder.append((char) c);
                         return next();
                     }
@@ -206,7 +204,9 @@ public class Lexer {
                     builder.append((char) c);
                     c = getChar();
                 }
-                backChar(c);
+                backChar(c); // 回退换行符（留给下一次解析更新行号）
+                // 当前字符序列不需要生成 Token（如注释），或需要跳过无效字符，
+                // 必须递归调用 next() 继续解析下一个有效 Token，避免返回空 Token 或终止解析。
                 return next();
             } else {
                 backChar(c); //不读下一个字符
@@ -291,9 +291,10 @@ public class Lexer {
             token = new Token(content, tokenType, lineNum);
         } else if (c == '\n') {
             lineNum++;
-            return next();
+            return next(); // 换行符不生成Token，继续解析下一行
         } else if (isWhitespaceWithoutLine(c)) { //除换行符外的空白符
-            return next();
+            return next(); // 跳过空白符，继续解析下一个Token
+            // 若不调用 next()：会返回 true 但 token 为 null，解析器无法获取有效 Token。
         } else if (c == EOF) {
             //backChar(c);
             return false;
