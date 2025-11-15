@@ -1,3 +1,4 @@
+import backend.ir.Module;
 import error.CompileError;
 import error.ErrorRecorder;
 import exception.LexerException;
@@ -21,8 +22,8 @@ public class Compiler {
     private static TokenList tokenList = new TokenList();
 
     public static void main(String[] args) throws IOException, ParserException, LexerException {
-        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        String filePath = "testfile.txt";
+        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        //String filePath = "testfile.txt";
         // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
         // 分词器
@@ -37,7 +38,10 @@ public class Compiler {
         //parser.parse();
 
         // 语义分析
-        visit(parser);
+        //visit(parser);
+
+        // 中间代码生成一
+        generateLLVM(parser);
 
         printError();
     }
@@ -120,6 +124,31 @@ public class Compiler {
 
         } catch (IOException e) {
             throw new RuntimeException(e);
+        } catch (ParserException e) {
+            throw new RuntimeException(e);
+        } catch (LexerException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void generateLLVM(Parser parser) throws IOException {
+        try(
+                FileOutputStream fileOutputStream = new FileOutputStream("llvm_ir.txt")
+        ){
+            PrintStream out = new PrintStream(fileOutputStream);
+            Node result = parser.parse();
+
+            Visitor visitor = new Visitor(errorRecorder);
+            Module module = visitor.generateIR(result);
+
+            out.print("""
+                    declare i32 @getint()
+                    declare void @putint(i32)
+                    declare void @putch(i32)
+                    declare void @putstr(i8*)
+                    
+                    """);
+            module.dump(out);
         } catch (ParserException e) {
             throw new RuntimeException(e);
         } catch (LexerException e) {

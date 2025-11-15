@@ -1,10 +1,10 @@
-void add(int a[, int b){
-    a[0]+b;
+void func3(int a[])
+{
+	//printf("%d crsb\n", a[0]);
+	return;
 }
 
-int main(){
-    int num[2]={1,0};
-    int b = 2;
-    add(num, b);
-    return 0;
+int main()
+{
+	return 0;
 }

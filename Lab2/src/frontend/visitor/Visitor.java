@@ -1,11 +1,16 @@
 package frontend.visitor;
 
-import backend.ir.Value;
+import backend.ir.*;
+import backend.ir.Module;
+import backend.ir.inst.AllocInst;
 import backend.ir.inst.BrInst;
+import backend.ir.inst.ICmpInst;
+import backend.ir.inst.ICmpInstCond;
 import error.ErrorRecorder;
 import error.ErrorType;
 import frontend.lexer.TokenType;
 import frontend.parser.node.CompUnit;
+import frontend.parser.node.Node;
 import frontend.parser.node.declaration.*;
 import frontend.parser.node.expression.*;
 import frontend.parser.node.function.*;
@@ -23,6 +28,7 @@ import frontend.symtable.symbol.VarSymbol;
 import java.util.*;
 
 public class Visitor {
+    /** 创建符号表 **/
     private final ErrorRecorder errorRecorder;
     // 全局根符号表
     private final SymbolTable symbolTable = new SymbolTable();
@@ -35,16 +41,42 @@ public class Visitor {
 
     private static final Set<String> LIBRARY_FUNCTIONS = new HashSet<>(Arrays.asList("getint", "printf"));
 
+    /** 生成中间代码 **/
+    private Module irModule = new Module();
+    private Function currFunction = null;
+    private BasicBlock currBasicBlock = null;
+
+    private boolean isGlobalVar = true;
+
+    // 生成中间代码
+    public Module generateIR(Node root){
+        if (root instanceof CompUnit compUnit){
+            visitCompUnit(compUnit);
+            return irModule;
+        }else {
+            return null;
+        }
+    }
+
     public Visitor(ErrorRecorder errorRecorder) {
         this.errorRecorder = errorRecorder;
         initLibraryFunctions();
     }
 
+    // 初始化符号表（把库函数先加入符号表）
     private void initLibraryFunctions() {
         for (String funcName : LIBRARY_FUNCTIONS) {
             FunctionSymbol funcSymbol = new FunctionSymbol();
             funcSymbol.ident = funcName;
             funcSymbol.retType.type = "int";
+
+            // 为库函数生成IR层的Function对象
+            List<IRType> paramTypes = new ArrayList<>();
+            IRType retType = IRType.getInt(); // 返回int
+            Function func = irModule.createFunction(retType, paramTypes);
+
+            // 将IR函数关联到符号表，确保调用时能找到
+            funcSymbol.targetValue = func;
 
             symbolTable.insertSymbol(funcSymbol);
         }
@@ -52,9 +84,11 @@ public class Visitor {
 
     // 编译单元 CompUnit → {Decl} {FuncDef} MainFuncDef
     public SymbolTable visitCompUnit(CompUnit compUnit) {
+        isGlobalVar = true;
         for (Decl decl : compUnit.decls){
             visitDecl(decl);
         }
+        isGlobalVar = false;
 
         for(FuncDef funcDef : compUnit.funcDefs){
             visitFuncDef(funcDef);
@@ -100,9 +134,46 @@ public class Visitor {
         }
 
         // 常量初始化提取
-        var r = visitConstInitVal(constDef.constInitVal);
+        VisitResult r = visitConstInitVal(constDef.constInitVal);
         varSymbol.values.addAll(r.constInitVals);
-        //var initValues = r.irValues;
+        List<Value> initValues = r.irValues; // 初始值的IR表示
+
+        if (isGlobalVar){
+            GlobalValue globalValue = irModule.createGlobalValue(IRType.getInt().dims(varSymbol.varType.dims), varSymbol.values);
+            globalValue.setName(varSymbol.ident);
+            varSymbol.targetValue = globalValue; // 符号表关联IR对象
+        }else {
+            // 分配局部变量空间
+            Value localVar = currFunction.getFirstBasicBlock().createAllocInstAndInsert(IRType.getInt().dims(varSymbol.varType.dims));
+            varSymbol.targetValue = localVar;
+
+            if(!varSymbol.isArray()){
+                // 非数组常量直接赋值
+                currBasicBlock.createStoreInst(initValues.get(0), varSymbol.targetValue);
+            }else {
+                // array with init values
+                // 数组常量逐个元素赋值
+                for (int i = 0; i < initValues.size(); i++){
+                    // 计算第i个元素的多维索引
+                    int[] indexs = new int[varSymbol.varType.dims.size()];
+                    int pos = i;
+                    for (int j = indexs.length - 1; j >= 0; j--){
+                        indexs[j] = pos % varSymbol.varType.dims.get(j);
+                        pos /= varSymbol.varType.dims.get(j);
+                    }
+
+                    // 生成GEP指令获取数组元素的地址
+                    Value initValue = initValues.get(i);
+                    Value arrayPtr = currBasicBlock.createGetElementPtrInst(varSymbol.targetValue, List.of(new ImmediateValue(0), new ImmediateValue(0)));
+                    for (int j = 0; j < indexs.length; j++){
+                        int visitIdx = indexs[j];
+                        List<Value> offsets = j == indexs.length - 1 ? List.of(new ImmediateValue(visitIdx)) : List.of(new ImmediateValue(visitIdx), new ImmediateValue(0));
+                        arrayPtr = currBasicBlock.createGetElementPtrInst(arrayPtr, offsets);
+                    }
+                    currBasicBlock.createStoreInst(initValue, arrayPtr);
+                }
+            }
+        }
 
         currentSymbolTable.insertSymbol(varSymbol);
     }
@@ -114,7 +185,8 @@ public class Visitor {
             VisitResult visitResult = new VisitResult();
             var r = visitConstExp(constInitVal.constExp);
             visitResult.constInitVals.add(r.constVal);
-            //visitResult.irValues.add(r.irValue);
+            // 不使用addAll，addAll用于 const int arr[2][2] = {{1,2}, {3,4}}，内层的 {1,2} 和 {3,4} 本身也是 ConstInitVal
+            visitResult.irValues.add(r.irValue);
             return visitResult;
         } else if (constInitVal.getUType() == 2) {
             //ConstInitVal → '{' [ ConstExp { ',' ConstExp } ] '}'
@@ -122,7 +194,7 @@ public class Visitor {
             for (ConstExp constExp : constInitVal.constExps){
                 var r = visitConstExp(constExp);
                 visitResult.constInitVals.add(r.constVal);
-                //visitResult.irValues.add(r.irValue);
+                visitResult.irValues.add(r.irValue);
             }
             return visitResult;
         }else {
@@ -158,9 +230,42 @@ public class Visitor {
             varSymbol.varType.dims.add(visitConstExp(dimension).constVal);
         }
 
-        if (varDef.initVal != null){
-            var r = visitInitVal(varDef.initVal);
-            varSymbol.values.addAll(r.constInitVals);
+        if(isGlobalVar){
+            if (varDef.initVal !=null){
+                VisitResult r = visitInitVal(varDef.initVal);
+                varSymbol.values.addAll(r.constInitVals);
+            }
+            GlobalValue globalValue = irModule.createGlobalValue(IRType.getInt().dims(varSymbol.varType.dims), varSymbol.values);
+            globalValue.setName(varSymbol.ident);
+            varSymbol.targetValue = globalValue;
+        }else {
+            Value localVar = currFunction.getFirstBasicBlock().createAllocInstAndInsert(IRType.getInt().dims(varSymbol.varType.dims));
+            varSymbol.targetValue = localVar;
+            if(varDef.initVal != null){
+                VisitResult r = visitInitVal(varDef.initVal);
+                List<Value> initValues = r.irValues;
+                if (!varSymbol.isArray()){
+                    currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
+                }else {
+                    for (int i = 0; i < initValues.size(); i++){
+                        int[] indexs = new int[varSymbol.varType.dims.size()];
+                        int pos = i;
+                        for (int j = indexs.length - 1; j >= 0; j--){
+                            indexs[j] = pos % varSymbol.varType.dims.get(j);
+                            pos /= varSymbol.varType.dims.get(j);
+                        }
+
+                        Value initValue = initValues.get(i);
+                        Value arrayPtr = currBasicBlock.createGetElementPtrInst(varSymbol.targetValue, List.of(new ImmediateValue(0)));
+                        for (int j = 0; j < indexs.length; j++){
+                            int visitIdx = indexs[j];
+                            List<Value> offsets = j == indexs.length - 1 ? List.of(new ImmediateValue(visitIdx)) : List.of(new ImmediateValue(visitIdx), new ImmediateValue(0));
+                            arrayPtr = currBasicBlock.createGetElementPtrInst(arrayPtr, offsets);
+                        }
+                        currBasicBlock.createStoreInst(initValue, arrayPtr);
+                    }
+                }
+            }
         }
 
         currentSymbolTable.insertSymbol(varSymbol);
@@ -173,7 +278,7 @@ public class Visitor {
             VisitResult visitResult = new VisitResult();
             var r = visitExp(initVal.exp);
             visitResult.constInitVals.add(r.constVal);
-            //visitResult.irValues.add(r.irValue);
+            visitResult.irValues.add(r.irValue);
             return visitResult;
         } else if (initVal.getUType() == 2) {
             // InitVal → '{' [ Exp { ',' Exp } ] '}'
@@ -181,7 +286,7 @@ public class Visitor {
             for (Exp exp : initVal.exps){
                 var r = visitExp(exp);
                 visitResult.constInitVals.add(r.constVal);
-                //visitResult.irValues.add(r.irValue);
+                visitResult.irValues.add(r.irValue);
             }
             return visitResult;
         }else {
@@ -201,7 +306,7 @@ public class Visitor {
         } else if (addExp.getUType() == 2) {
             VisitResult visitResult = new VisitResult();
             VisitResult r1= visitAddExp(addExp.addExp);
-            var r2 = visitMulExp(addExp.mulExp2);
+            VisitResult r2 = visitMulExp(addExp.mulExp2);
             Integer val1 = r1.constVal;
             Integer val2 = r2.constVal;
 
@@ -213,6 +318,13 @@ public class Visitor {
                     visitResult.constVal = val1 + val2;
                 }else {
                     visitResult.constVal = val1 - val2;
+                }
+            }
+            if (currBasicBlock != null){
+                if (addExp.op == TokenType.PLUS){
+                    visitResult.irValue = currBasicBlock.createAddInst(r1.irValue, r2.irValue);
+                }else {
+                    visitResult.irValue = currBasicBlock.createSubInst(r1.irValue, r2.irValue);
                 }
             }
             return visitResult;
@@ -242,6 +354,16 @@ public class Visitor {
                     visitResult.constVal = val1 / val2;
                 }else if (mulExp.op == TokenType.MOD) {
                     visitResult.constVal = val1 % val2;
+                }
+            }
+
+            if (currBasicBlock != null){
+                if (mulExp.op == TokenType.MULT){
+                    visitResult.irValue = currBasicBlock.createMulInst(r1.irValue, r2.irValue);
+                } else if (mulExp.op == TokenType.DIV) {
+                    visitResult.irValue = currBasicBlock.createDivInst(r1.irValue, r2.irValue);
+                } else if (mulExp.op == TokenType.MOD) {
+                    visitResult.irValue = currBasicBlock.createSRemInst(r1.irValue, r2.irValue);
                 }
             }
 
@@ -285,11 +407,14 @@ public class Visitor {
                         errorRecorder.addError(ErrorType.TYPE_OF_PARAM_NOT_MATCH, unaryExp.identLineNum);
                     }
                 }
+
+                visitResult.irValue = currBasicBlock.createCallInst((Function) functionSymbol.targetValue, r.irValues);
             }else {
                 if(!functionSymbol.paramTypeList.isEmpty()){
                     errorRecorder.addError(ErrorType.NUM_OF_PARAM_NOT_MATCH, unaryExp.identLineNum);
                     return visitResult;
                 }
+                visitResult.irValue = currBasicBlock.createCallInst((Function) functionSymbol.targetValue, List.of());
             }
             return visitResult;
         } else if (unaryExp.getUType() == 3) {
@@ -311,6 +436,17 @@ public class Visitor {
                     visitResult.constVal = val == 0 ? 0 : 1;
                 }
             }
+
+            if (currBasicBlock != null){
+                TokenType op = visitUnaryOp(unaryExp.unaryOp);
+                if (op == TokenType.PLUS){
+                    visitResult.irValue = r.irValue;
+                }else if(op == TokenType.MINU){
+                    visitResult.irValue = currBasicBlock.createSubInst(new ImmediateValue(0), r.irValue);
+                }else {
+                    visitResult.irValue = currBasicBlock.createICmpInst(ICmpInstCond.EQ, new ImmediateValue(0), r.irValue);
+                }
+            }
             return visitResult;
         }else {
             return new VisitResult();
@@ -329,6 +465,12 @@ public class Visitor {
         } else if (primaryExp.getUType() == 2) {
             // PrimaryExp → LVal
             VisitResult r = visitLVal(primaryExp.lVal);
+            if (currBasicBlock != null){
+                if(r.lvalLoadNotNeed){
+                    return r;
+                }
+                r.irValue = currBasicBlock.createLoadInst(r.irValue);
+            }
             return r;
         } else if (primaryExp.getUType() == 3) {
             return visitNumber(primaryExp.number);
@@ -353,9 +495,11 @@ public class Visitor {
 
         // 数组维度信息收集
         List<Integer> accessDims = new ArrayList<>();
+        List<Value> irVisitDims = new ArrayList<>();
         for (Exp exp : lVal.dimensions){
             VisitResult rtExp = visitExp(exp);
             accessDims.add(rtExp.constVal);
+            irVisitDims.add(rtExp.irValue);
         }
 
         List<Integer> typeDims = new ArrayList<>();
@@ -395,6 +539,37 @@ public class Visitor {
                 }
             }
         }
+
+        if (currBasicBlock != null){
+            if(varSymbol.isArray()){
+                List<Integer> dims = varSymbol.varType.dims;
+
+                Value arrayPtr;
+                Value symbolValue = varSymbol.targetValue;
+
+                if(symbolValue instanceof AllocInst allocSymVal && allocSymVal.getDataType().getPtrNum() != 0){
+                    arrayPtr = currBasicBlock.createLoadInst(symbolValue);
+                }else {
+                    arrayPtr = currBasicBlock.createGetElementPtrInst(symbolValue, List.of(new ImmediateValue(0), new ImmediateValue(0)));
+                }
+
+                for (int i = 0; i < irVisitDims.size(); i++){
+                    Value visitDim = irVisitDims.get(i);
+                    List<Value> offsets = (i == dims.size() - 1) ? List.of(visitDim) : List.of(visitDim, new ImmediateValue(0));
+                    arrayPtr = currBasicBlock.createGetElementPtrInst(arrayPtr, offsets);
+                }
+
+                visitResult.irValue = arrayPtr;
+                visitResult.lvalLoadNotNeed = dims.size() != irVisitDims.size();
+            }else {
+                if(varSymbol.isConst){
+                    visitResult.irValue = new ImmediateValue(varSymbol.values.get(0));
+                    visitResult.lvalLoadNotNeed = true;
+                }else {
+                    visitResult.irValue = varSymbol.targetValue;
+                }
+            }
+        }
         return visitResult;
     }
 
@@ -403,7 +578,7 @@ public class Visitor {
         VisitResult visitResult = new VisitResult();
         visitResult.expType.type = "int";
         visitResult.constVal = Integer.parseInt(number.intConst);
-        //visitResult.irValue = new ImmediateValue(visitResult.constVal);
+        visitResult.irValue = new ImmediateValue(visitResult.constVal);
         return visitResult;
     }
 
@@ -444,7 +619,39 @@ public class Visitor {
         // 标记是否需要返回值
         isRetExpNotNeed = functionSymbol.retType.type.equals("void");
 
+        ArrayList<IRType> irArgTypes = new ArrayList<>();
+        for (Type type : functionSymbol.paramTypeList){
+            if (type.dims.isEmpty()){
+                irArgTypes.add(IRType.getInt());
+            }else {
+                irArgTypes.add(IRType.getInt().dims(type.dims.subList(1, type.dims.size())).ptr(1));
+            }
+        }
+
+        currFunction = irModule.createFunction(functionSymbol.retType.type.equals("void") ? IRType.getVoid() : IRType.getInt(), irArgTypes);
+        currFunction.setName(functionSymbol.ident);
+        functionSymbol.targetValue = currFunction;
+        currBasicBlock = currFunction.createBasicBlock();
+        currBasicBlock.setLoopNum(isInLoop);
+
+        if (funcDef.funcFParams != null){
+            for (int i = currFunction.getArguments().size() - 1; i >= 0; i--){
+                FunctionArgument currArgVal = currFunction.getArguments().get(i);
+                Symbol currParamSym = currentSymbolTable.getSymbol(funcDef.funcFParams.funcFParams.get(i).ident);
+                Value currArgPtr = currFunction.getFirstBasicBlock().createAllocInstAndInsert(currArgVal.getType());
+                currBasicBlock.createStoreInst(currArgVal, currArgPtr);
+                currParamSym.targetValue = currArgPtr;
+            }
+        }
+
         visitBlock(funcDef.block);
+
+        if (functionSymbol.retType.type.equals("void") && funcDef.block.isWithoutReturn()){
+            currBasicBlock.createReturnInst(null);
+        }
+
+        currBasicBlock = null;
+        currFunction = null;
 
         // 检查非 void 函数的返回值是否缺失
         if(!functionSymbol.retType.type.equals("void") && funcDef.block.isWithoutReturn()){
@@ -504,7 +711,7 @@ public class Visitor {
         for(Exp exp : funcRParams.exps){
             VisitResult r = visitExp(exp);
             visitResult.paramTypes.add(r.expType);
-            //visitResult.irValues.add(r.irValue);
+            visitResult.irValues.add(r.irValue);
         }
         return visitResult;
     }
@@ -546,6 +753,7 @@ public class Visitor {
              }
 
              VisitResult rtExp = visitExp(stmt.exp1);
+             currBasicBlock.createStoreInst(rtExp.irValue, rtLVal.irValue);
          }else if (stmt.getUType() == 2){
              // Stmt → [Exp] ';'
              if(stmt.exp2 != null){
@@ -559,60 +767,153 @@ public class Visitor {
          }else if (stmt.getUType() == 4){
              // Stmt → 'if' '(' Cond ')' Stmt [ 'else' Stmt ]
              var r = visitCond(stmt.cond1);
+
+             BasicBlock trueBlock = currBasicBlock;
              visitStmt(stmt.ifStmt);
+
+             BasicBlock lastBlockInTrue = currBasicBlock;
+             currBasicBlock = currFunction.createBasicBlock();
+             currBasicBlock.setLoopNum(isInLoop);
+
+             BasicBlock falseBlock = currBasicBlock;
 
              if(stmt.elseStmt != null){
                  visitStmt(stmt.elseStmt);
+                 BasicBlock lastBlockInFalse = currBasicBlock;
+                 currBasicBlock = currFunction.createBasicBlock();
+                 currBasicBlock.setLoopNum(isInLoop);
+
+                 lastBlockInFalse.createBrInstWithoutCond(currBasicBlock);
+             }
+             lastBlockInTrue.createBrInstWithoutCond(currBasicBlock);
+
+             for (BasicBlock blockToTrue : r.blocksToTrue){
+                 BrInst brInst = (BrInst) blockToTrue.getInstructions().get(blockToTrue.getInstructions().size() - 1);
+                 brInst.setTrueBranch(trueBlock);
+             }
+
+             for (BasicBlock blockToFalse : r.blocksToFalse){
+                 BrInst brInst = (BrInst) blockToFalse.getInstructions().get(blockToFalse.getInstructions().size() - 1);
+                 brInst.setFalseBranch(falseBlock);
              }
          }else if (stmt.getUType() == 5){
              // Stmt → 'for' '(' [ForStmt] ';' [Cond] ';' [ForStmt] ')' Stmt
             breakBrInsts.push(new ArrayList<>());
             continueBrInsts.push(new ArrayList<>());
 
+            BasicBlock forStmt1Block = currBasicBlock;
             if(stmt.forStmt1 != null){
                 visitForStmt(stmt.forStmt1);
             }
+
+            currBasicBlock = currFunction.createBasicBlock();
+            currBasicBlock.setLoopNum(isInLoop);
+
+            forStmt1Block.createBrInstWithoutCond(currBasicBlock);
+            BasicBlock loopEntryBlock = currBasicBlock;
 
             VisitResult condRt = new VisitResult();
             if(stmt.cond2 != null){
                 condRt = visitCond(stmt.cond2);
             }
+            BasicBlock stmtBlock = currBasicBlock;
 
             isInLoop++;
             visitStmt(stmt.stmt);
             isInLoop--;
 
+            BasicBlock lastBlockInStmt = currBasicBlock;
+            currBasicBlock = currFunction.createBasicBlock();
+            currBasicBlock.setLoopNum(isInLoop);
+
+            lastBlockInStmt.createBrInstWithoutCond(currBasicBlock);
+            BasicBlock forStmt2Block = currBasicBlock;
+
             if(stmt.forStmt2 != null){
                 visitForStmt(stmt.forStmt2);
             }
+            forStmt2Block.createBrInstWithoutCond(loopEntryBlock);
 
-            continueBrInsts.pop();
-            breakBrInsts.pop();
+            currBasicBlock = currFunction.createBasicBlock();
+            currBasicBlock.setLoopNum(isInLoop);
+
+            BasicBlock loopExitBlock = currBasicBlock;
+
+            for(BasicBlock blockToTrue : condRt.blocksToTrue){
+                BrInst brInst = (BrInst) blockToTrue.getInstructions().get(blockToTrue.getInstructions().size() - 1);
+                brInst.setTrueBranch(stmtBlock);
+            }
+
+            for(BasicBlock blockToFalse : condRt.blocksToFalse){
+                BrInst brInst = (BrInst) blockToFalse.getInstructions().get(blockToFalse.getInstructions().size() - 1);
+                brInst.setFalseBranch(loopExitBlock);
+            }
+
+            for (BrInst continueBrInst : continueBrInsts.pop()){
+                continueBrInst.setDest(forStmt2Block);
+            }
+
+            for(BrInst breakBrInst : breakBrInsts.pop()){
+                breakBrInst.setDest(loopExitBlock);
+            }
          }else if (stmt.getUType() == 6){
              // Stmt -> 'break' ';' Stmt -> 'continue' ';'
              if(isInLoop == 0){
                  errorRecorder.addError(ErrorType.BREAK_OR_CONTINUE_ERROR, stmt.tkLineNum);
                  return;
              }
+
+             if (stmt.type == TokenType.CONTINUETK){
+                 continueBrInsts.peek().add((BrInst) currBasicBlock.createBrInstWithoutCond(null));
+                 currBasicBlock = currFunction.createBasicBlock();
+                 currBasicBlock.setLoopNum(isInLoop);
+             } else if (stmt.type == TokenType.BREAKTK) {
+                 breakBrInsts.peek().add((BrInst) currBasicBlock.createBrInstWithoutCond(null));
+                 currBasicBlock = currFunction.createBasicBlock();
+                 currBasicBlock.setLoopNum(isInLoop);
+             }else {
+                 assert false;
+             }
          }else if (stmt.getUType() == 7){
              // Stmt -> 'return' [Exp] ';'
+             Value expIr = null;
              if(stmt.exp3 != null){
                  if(isRetExpNotNeed){
                      errorRecorder.addError(ErrorType.RETURN_NOT_MATCH, stmt.returnLineNum);
                      return;
                  }
                  var result = visitExp(stmt.exp3);
+                 expIr = result.irValue;
              }
+             currBasicBlock.createReturnInst(expIr);
          }else if (stmt.getUType() == 8){
              // Stmt -> 'printf''('StringConst {','Exp}')'';'
+             List<Value> expValues = new ArrayList<>();
             for (Exp exp : stmt.exps){
-                visitExp(exp);
+                expValues.add(visitExp(exp).irValue);
             }
 
             // 校验格式化字符串 %d 个数与表达式个数匹配
-            var fCharNum = (stmt.stringConst.length() - String.join("", stmt.stringConst.split("%d")).length()) / 2;
+            int fCharNum = (stmt.stringConst.length() - String.join("", stmt.stringConst.split("%d")).length()) / 2;
             if(fCharNum != stmt.exps.size()){
                 errorRecorder.addError(ErrorType.PRINTF_NOT_MATCH, stmt.printfLineNum);
+                return;
+            }
+
+            try{
+                for (int i = 1, j = 0; i < stmt.stringConst.length() - 1; i++){
+                    char ch = stmt.stringConst.charAt(i);
+                    if(ch == '%'){
+                        currBasicBlock.createCallInst(Function.BUILD_IN_PUTINT, List.of(expValues.get(j++)));
+                        i++;
+                    } else if (ch == '\\') {
+                        currBasicBlock.createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue('\n')));
+                        i++;
+                    }else {
+                        currBasicBlock.createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue(ch)));
+                    }
+                }
+            }catch (IndexOutOfBoundsException e){
                 return;
             }
          }
@@ -626,8 +927,10 @@ public class Visitor {
     // 语句 ForStmt → LVal '=' Exp { ',' LVal '=' Exp }
     public void visitForStmt(ForStmt stmt){
         for(int i = 0; i < stmt.lVals.size(); i++){
-            visitLVal(stmt.lVals.get(i));
-            visitExp(stmt.exps.get(i));
+            VisitResult r1 = visitLVal(stmt.lVals.get(i));
+            VisitResult r2 = visitExp(stmt.exps.get(i));
+
+            currBasicBlock.createStoreInst(r2.irValue, r1.irValue);
 
             Symbol lValSymbol = currentSymbolTable.getSymbol(stmt.lVals.get(i).ident);
             if(lValSymbol instanceof VarSymbol lValVarSym && lValVarSym.isConst){
@@ -642,12 +945,28 @@ public class Visitor {
             VisitResult visitResult = new VisitResult();
             VisitResult r = visitLAndExp(lOrExp.lAndExp1);
             visitResult.expType = r.expType;
+
+            visitResult.blocksToTrue.add(r.andBlocks.get(r.andBlocks.size() - 1));
+            visitResult.nearAndBlocks.addAll(r.andBlocks);
+            visitResult.blocksToFalse.addAll(visitResult.nearAndBlocks);
             return visitResult;
         } else if (lOrExp.getUType() == 2) {
             VisitResult visitResult = new VisitResult();
 
             VisitResult r1 = visitLOrExp(lOrExp.lOrExp);
+            visitResult.blocksToTrue.addAll(r1.blocksToTrue);
+
             VisitResult r2 = visitLAndExp(lOrExp.lAndExp2);
+            visitResult.blocksToTrue.add(r2.andBlocks.get(r2.andBlocks.size() - 1));
+
+            BasicBlock firstAndBlock = r2.andBlocks.get(0);
+            for (BasicBlock nearAndBlock : r1.nearAndBlocks){
+                BrInst brInst = (BrInst) nearAndBlock.getInstructions().get(nearAndBlock.getInstructions().size() - 1);
+                brInst.setFalseBranch(firstAndBlock);
+            }
+
+            visitResult.nearAndBlocks.addAll(r2.andBlocks);
+            visitResult.blocksToFalse.addAll(visitResult.nearAndBlocks);
 
             visitResult.expType = r1.expType;
 
@@ -664,12 +983,32 @@ public class Visitor {
 
             VisitResult r = visitEqExp(lAndExp.eqExp1);
             visitResult.expType = r.expType;
+            if(!(r.irValue instanceof ICmpInst)){
+                r.irValue = currBasicBlock.createICmpInst(ICmpInstCond.NE, new ImmediateValue(0), r.irValue);
+            }
+            currBasicBlock.createBrInstWithCond(r.irValue, null, null);
+            visitResult.andBlocks.add(currBasicBlock);
+            currBasicBlock = currFunction.createBasicBlock();
+            currBasicBlock.setLoopNum(isInLoop);
+
             return visitResult;
         } else if (lAndExp.getUType() == 2) {
             VisitResult visitResult = new VisitResult();
 
             VisitResult r1 = visitLAndExp(lAndExp.lAndExp);
+            BasicBlock lastAndBlock = r1.andBlocks.get(r1.andBlocks.size() - 1);
+            BrInst brInLastAndBlock = (BrInst) lastAndBlock.getInstructions().get(lastAndBlock.getInstructions().size() - 1);
+            brInLastAndBlock.setTrueBranch(currBasicBlock);
+            visitResult.andBlocks.addAll(r1.andBlocks);
+
             VisitResult r2 = visitEqExp(lAndExp.eqExp2);
+            if(!(r2.irValue instanceof ICmpInst)){
+                r2.irValue = currBasicBlock.createICmpInst(ICmpInstCond.NE, new ImmediateValue(0), r2.irValue);
+            }
+            currBasicBlock.createBrInstWithCond(r2.irValue, null, null);
+            visitResult.andBlocks.add(currBasicBlock);
+            currBasicBlock = currFunction.createBasicBlock();
+            currBasicBlock.setLoopNum(isInLoop);
 
             visitResult.expType = r1.expType;
             return visitResult;
@@ -688,6 +1027,16 @@ public class Visitor {
             VisitResult r2 = visitRelExp(eqExp.relExp2);
 
             visitResult.expType = r1.expType;
+
+            if(r1.irValue instanceof ICmpInst){
+                r1.irValue = currBasicBlock.createZExtInst(IRType.getInt(), r1.irValue);
+            }
+            if(r2.irValue instanceof ICmpInst){
+                r2.irValue = currBasicBlock.createZExtInst(IRType.getInt(), r2.irValue);
+            }
+
+            ICmpInstCond cond = eqExp.op == TokenType.EQL ? ICmpInstCond.EQ : ICmpInstCond.NE;
+            visitResult.irValue = currBasicBlock.createICmpInst(cond, r1.irValue, r2.irValue);
             return visitResult;
         }else {
             return new VisitResult();
@@ -703,6 +1052,22 @@ public class Visitor {
             VisitResult r1 = visitRelExp(relExp.relExp);
             VisitResult r2 = visitAddExp(relExp.addExp2);
 
+            if(r1.irValue instanceof ICmpInst){
+                r1.irValue = currBasicBlock.createZExtInst(IRType.getInt(), r1.irValue);
+            }
+            if(r2.irValue instanceof ICmpInst){
+                r2.irValue = currBasicBlock.createZExtInst(IRType.getInt(), r2.irValue);
+            }
+
+            ICmpInstCond cond = switch (relExp.op){
+                case LSS -> ICmpInstCond.SLT;
+                case GRE -> ICmpInstCond.SGT;
+                case LEQ -> ICmpInstCond.SLE;
+                case GEQ -> ICmpInstCond.SGE;
+                default -> null;
+            };
+            visitResult.irValue = currBasicBlock.createICmpInst(cond, r1.irValue, r2.irValue);
+
             visitResult.expType = r1.expType;
             return visitResult;
         }else {
@@ -712,9 +1077,9 @@ public class Visitor {
 
     // 主函数定义 MainFuncDef → 'int' 'main' '(' ')' Block
     public void visitMainFuncDef(MainFuncDef mainFuncDef){
-//        FunctionSymbol functionSymbol = new FunctionSymbol();
-//        functionSymbol.retType.type = "int";
-//        functionSymbol.ident = "main";
+        FunctionSymbol functionSymbol = new FunctionSymbol();
+        functionSymbol.retType.type = "int";
+        functionSymbol.ident = "main";
 //        currentSymbolTable.insertSymbol(functionSymbol);
 
         // 进入main函数局部作用域
@@ -722,11 +1087,21 @@ public class Visitor {
 
         isRetExpNotNeed = false;
 
+        ArrayList<IRType> irArgTypes = new ArrayList<>();
+        currFunction = irModule.createFunction(IRType.getInt(), irArgTypes);
+        currFunction.setName("main");
+        functionSymbol.targetValue = currFunction;
+        currBasicBlock = currFunction.createBasicBlock();
+        currBasicBlock.setLoopNum(isInLoop);
+
         visitBlock(mainFuncDef.block);
 
         if (mainFuncDef.block.isWithoutReturn()){
             errorRecorder.addError(ErrorType.RETURN_MISS, mainFuncDef.block.blockRLineNum);
         }
+
+        currBasicBlock = null;
+        currFunction = null;
 
         // 退出局部作用域
         currentSymbolTable = currentSymbolTable.getPreTable();
