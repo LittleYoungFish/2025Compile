@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Function extends Value{
+    private boolean isLibrary = false;
+
     private final IRType retType;
     private final List<FunctionArgument> arguments = new ArrayList<>();
     private final List<BasicBlock> basicBlocks = new ArrayList<>();
@@ -19,6 +21,14 @@ public class Function extends Value{
         BUILD_IN_PUTINT.setName("putint");
         BUILD_IN_PUTCH.setName("putch");
         BUILD_IN_PUTSTR.setName("putstr");
+    }
+
+    public boolean isLibrary() {
+        return isLibrary;
+    }
+
+    public void setLibrary(boolean isLibrary) {
+        this.isLibrary = isLibrary;
     }
 
     public Function(IRType retType, List<IRType> argTypes){

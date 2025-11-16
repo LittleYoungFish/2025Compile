@@ -71,14 +71,25 @@ public class Visitor {
             funcSymbol.retType.type = "int";
 
             // 为库函数生成IR层的Function对象
-            List<IRType> paramTypes = new ArrayList<>();
-            IRType retType = IRType.getInt(); // 返回int
-            Function func = irModule.createFunction(retType, paramTypes);
+            if (funcName.equals("getint")) {
+                List<IRType> paramTypes = new ArrayList<>();
+                IRType retType = IRType.getInt();
+                Function func = irModule.createFunction(retType, paramTypes);
+                func.setName("getint");
+                func.setLibrary(true);
+                funcSymbol.targetValue = func;
+                symbolTable.insertSymbol(funcSymbol);
+            }else {
+                List<IRType> paramTypes = new ArrayList<>();
+                IRType retType = IRType.getInt(); // 返回int
+                Function func = irModule.createFunction(retType, paramTypes);
+                func.setLibrary(true);
 
-            // 将IR函数关联到符号表，确保调用时能找到
-            funcSymbol.targetValue = func;
+                // 将IR函数关联到符号表，确保调用时能找到
+                funcSymbol.targetValue = func;
 
-            symbolTable.insertSymbol(funcSymbol);
+                symbolTable.insertSymbol(funcSymbol);
+            }
         }
     }
 
@@ -239,30 +250,55 @@ public class Visitor {
             globalValue.setName(varSymbol.ident);
             varSymbol.targetValue = globalValue;
         }else {
-            Value localVar = currFunction.getFirstBasicBlock().createAllocInstAndInsert(IRType.getInt().dims(varSymbol.varType.dims));
-            varSymbol.targetValue = localVar;
-            if(varDef.initVal != null){
-                VisitResult r = visitInitVal(varDef.initVal);
-                List<Value> initValues = r.irValues;
-                if (!varSymbol.isArray()){
-                    currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
-                }else {
-                    for (int i = 0; i < initValues.size(); i++){
-                        int[] indexs = new int[varSymbol.varType.dims.size()];
-                        int pos = i;
-                        for (int j = indexs.length - 1; j >= 0; j--){
-                            indexs[j] = pos % varSymbol.varType.dims.get(j);
-                            pos /= varSymbol.varType.dims.get(j);
-                        }
+            // 非全局变量
+            if(varSymbol.isStatic){
+                // 静态局部变量
+                // 静态局部变量无维度，dims 为空列表
+                List<Integer> initVals = new ArrayList<>();
+                // 若有显式初始化值则用显式值，无则默认 0（这里先加 0，后续初始化逻辑会覆盖）
+                if (varDef.initVal != null) {
+                    VisitResult r = visitInitVal(varDef.initVal);
+                    initVals.addAll(r.constInitVals);
+                } else {
+                    initVals.add(0); // 静态变量默认初始化为 0
+                }
+                // 创建全局值（全局数据区存储）
+                GlobalValue staticGlobal = irModule.createGlobalValue(IRType.getInt().dims(varSymbol.varType.dims), initVals);
+                staticGlobal.setName(currFunction.getName().substring(1) + "_" + varSymbol.ident);
+                varSymbol.targetValue = staticGlobal;
 
-                        Value initValue = initValues.get(i);
-                        Value arrayPtr = currBasicBlock.createGetElementPtrInst(varSymbol.targetValue, List.of(new ImmediateValue(0)));
-                        for (int j = 0; j < indexs.length; j++){
-                            int visitIdx = indexs[j];
-                            List<Value> offsets = j == indexs.length - 1 ? List.of(new ImmediateValue(visitIdx)) : List.of(new ImmediateValue(visitIdx), new ImmediateValue(0));
-                            arrayPtr = currBasicBlock.createGetElementPtrInst(arrayPtr, offsets);
+                // 若有显式初始化，生成 store 指令覆盖默认值
+                if (varDef.initVal != null) {
+                    VisitResult r = visitInitVal(varDef.initVal);
+                    // 静态局部变量初始化：全局值仅需赋值一次，直接生成 store 到全局值地址
+                    currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
+                }
+            }else {
+                Value localVar = currFunction.getFirstBasicBlock().createAllocInstAndInsert(IRType.getInt().dims(varSymbol.varType.dims));
+                varSymbol.targetValue = localVar;
+                if (varDef.initVal != null) {
+                    VisitResult r = visitInitVal(varDef.initVal);
+                    List<Value> initValues = r.irValues;
+                    if (!varSymbol.isArray()) {
+                        currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
+                    } else {
+                        for (int i = 0; i < initValues.size(); i++) {
+                            int[] indexs = new int[varSymbol.varType.dims.size()];
+                            int pos = i;
+                            for (int j = indexs.length - 1; j >= 0; j--) {
+                                indexs[j] = pos % varSymbol.varType.dims.get(j);
+                                pos /= varSymbol.varType.dims.get(j);
+                            }
+
+                            Value initValue = initValues.get(i);
+                            Value arrayPtr = currBasicBlock.createGetElementPtrInst(varSymbol.targetValue, List.of(new ImmediateValue(0), new ImmediateValue(0)));
+                            for (int j = 0; j < indexs.length; j++) {
+                                int visitIdx = indexs[j];
+                                List<Value> offsets = j == indexs.length - 1 ? List.of(new ImmediateValue(visitIdx)) : List.of(new ImmediateValue(visitIdx), new ImmediateValue(0));
+                                arrayPtr = currBasicBlock.createGetElementPtrInst(arrayPtr, offsets);
+                            }
+                            currBasicBlock.createStoreInst(initValue, arrayPtr);
                         }
-                        currBasicBlock.createStoreInst(initValue, arrayPtr);
                     }
                 }
             }
@@ -444,7 +480,12 @@ public class Visitor {
                 }else if(op == TokenType.MINU){
                     visitResult.irValue = currBasicBlock.createSubInst(new ImmediateValue(0), r.irValue);
                 }else {
-                    visitResult.irValue = currBasicBlock.createICmpInst(ICmpInstCond.EQ, new ImmediateValue(0), r.irValue);
+                    //visitResult.irValue = currBasicBlock.createICmpInst(ICmpInstCond.EQ, new ImmediateValue(0), r.irValue);
+                    // 1. 第一步：比较 x == 0 → 得到 i1 类型（true 表示 x=0）
+                    Value icmp = currBasicBlock.createICmpInst(ICmpInstCond.EQ, new ImmediateValue(0), r.irValue);
+                    // 2. 第二步：将 i1 零扩展为 i32（true→1，false→0），符合 C 语言 !x 的语义
+                    Value zext = currBasicBlock.createZExtInst(IRType.getInt(), icmp); // IRType.getInt() 是 i32
+                    visitResult.irValue = zext;
                 }
             }
             return visitResult;

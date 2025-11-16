@@ -11,7 +11,7 @@ public class GlobalValue extends Value{
     public GlobalValue(IRType dataType, List<Integer> initVals){
         super(dataType.clone().ptr(dataType.getPtrNum() + 1)); // the type of global var is actually the address of the data
         this.dataType = dataType;
-        this.initVals = initVals;
+        this.initVals.addAll(initVals);
     }
 
     public IRType getDataType() {

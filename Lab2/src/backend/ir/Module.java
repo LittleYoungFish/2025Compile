@@ -37,8 +37,10 @@ public class Module {
         }
 
         for(Function function : functions){
-            function.dump(out);
-            NameAllocator.getInstance().reset();
+            if (!function.isLibrary()) {
+                function.dump(out);
+                NameAllocator.getInstance().reset();
+            }
         }
     }
 

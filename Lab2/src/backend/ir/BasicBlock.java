@@ -41,7 +41,7 @@ public class BasicBlock extends Value{
     private Value insertInstruction(Instruction inst){
         instructions.add(inst);
         inst.setBasicBlock(this);
-        return this;
+        return inst;
     }
 
     private Integer getImmediateValue(Value value){

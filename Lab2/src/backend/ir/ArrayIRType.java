@@ -69,7 +69,9 @@ public class ArrayIRType extends IRType{
                 if(i != 0){
                     sb.append(", ");
                 }
-                sb.append(elementType).append(" ").append(initVals.get(i));
+                //sb.append(elementType).append(" ").append(initVals.get(i));
+                int value = (i < initVals.size()) ? initVals.get(i) : 0;
+                sb.append(elementType).append(" ").append(value);
             }
             sb.append("]");
             return sb.toString();
