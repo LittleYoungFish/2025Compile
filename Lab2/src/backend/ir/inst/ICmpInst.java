@@ -10,6 +10,17 @@ public class ICmpInst extends Instruction{
     private Value leftValue;
     private Value rightValue;
 
+    public enum LogicOp {NONE, AND, OR}
+    private LogicOp logicOp = LogicOp.NONE;
+
+    public void setLogicOp(LogicOp logicOp) {
+        this.logicOp = logicOp;
+    }
+
+    public LogicOp getLogicOp() {
+        return logicOp;
+    }
+
     public ICmpInst(ICmpInstCond cond, Value leftValue, Value rightValue){
         super(IRType.getBool(), leftValue, rightValue);
         this.cond = cond;

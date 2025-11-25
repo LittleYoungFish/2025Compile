@@ -1,4 +1,5 @@
 import backend.ir.Module;
+import backend.target.Translator;
 import error.CompileError;
 import error.ErrorRecorder;
 import exception.LexerException;
@@ -22,8 +23,8 @@ public class Compiler {
     private static TokenList tokenList = new TokenList();
 
     public static void main(String[] args) throws IOException, ParserException, LexerException {
-        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        String filePath = "testfile.txt";
+        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        //String filePath = "testfile.txt";
         // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
         // 分词器
@@ -41,7 +42,10 @@ public class Compiler {
         //visit(parser);
 
         // 中间代码生成一
-        generateLLVM(parser);
+        //generateLLVM(parser);
+
+        // 中间代码生成二
+        generateMIPS(parser);
 
         printError();
     }
@@ -153,6 +157,21 @@ public class Compiler {
             throw new RuntimeException(e);
         } catch (LexerException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void generateMIPS(Parser parser) throws IOException, LexerException, LexerException, ParserException {
+        try(
+                FileOutputStream fileOutputStream = new FileOutputStream("mips.txt")
+        ){
+            PrintStream out = new PrintStream(fileOutputStream);
+            Node result = parser.parse();
+            Visitor visitor = new Visitor(errorRecorder);
+            Module module = visitor.generateIR(result);
+
+            Translator translator = new Translator();
+            translator.translate(module);
+            translator.getAsmTarget().dump(out, false);
         }
     }
 

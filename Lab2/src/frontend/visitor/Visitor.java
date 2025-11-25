@@ -45,6 +45,12 @@ public class Visitor {
     private Module irModule = new Module();
     private Function currFunction = null;
     private BasicBlock currBasicBlock = null;
+    // 当前代码块层级
+    private int blockSeq = 0;
+    // 静态变量序号计数器
+    private Map<String, Integer> staticVarCounter = new HashMap<>();
+    // 记录已生成的静态全局变量，避免重复创建
+    private Map<String, GlobalValue> staticGlobalMap = new HashMap<>();
 
     private boolean isGlobalVar = true;
 
@@ -83,6 +89,7 @@ public class Visitor {
                 List<IRType> paramTypes = new ArrayList<>();
                 IRType retType = IRType.getInt(); // 返回int
                 Function func = irModule.createFunction(retType, paramTypes);
+                func.setName(funcName);
                 func.setLibrary(true);
 
                 // 将IR函数关联到符号表，确保调用时能找到
@@ -253,25 +260,40 @@ public class Visitor {
             // 非全局变量
             if(varSymbol.isStatic){
                 // 静态局部变量
-                // 静态局部变量无维度，dims 为空列表
-                List<Integer> initVals = new ArrayList<>();
-                // 若有显式初始化值则用显式值，无则默认 0（这里先加 0，后续初始化逻辑会覆盖）
-                if (varDef.initVal != null) {
-                    VisitResult r = visitInitVal(varDef.initVal);
-                    initVals.addAll(r.constInitVals);
+                // 1. 生成唯一命名的key（函数名_变量名）
+                String funcName = currFunction.getName().substring(1); // 原逻辑：去掉前缀下划线
+                String baseKey = funcName + "_" + varSymbol.ident;
+                // 2. 获取序号：首次为0（命名为main_a），后续递增（main_a_1/main_a_2）
+                int seq = staticVarCounter.getOrDefault(baseKey, 0);
+                String staticGlobalName = baseKey + (seq == 0 ? "" : "_" + seq); // 核心：动态生成唯一名称
+                staticVarCounter.put(baseKey, seq + 1); // 更新序号
+
+                // 3. 检查缓存：避免重复创建全局值（解决重定义核心）
+                GlobalValue staticGlobal;
+                if (staticGlobalMap.containsKey(staticGlobalName)) {
+                    staticGlobal = staticGlobalMap.get(staticGlobalName);
                 } else {
-                    initVals.add(0); // 静态变量默认初始化为 0
+                    // 静态局部变量无维度，dims 为空列表
+                    List<Integer> initVals = new ArrayList<>();
+                    // 若有显式初始化值则用显式值，无则默认 0（这里先加 0，后续初始化逻辑会覆盖）
+                    if (varDef.initVal != null) {
+                        VisitResult r = visitInitVal(varDef.initVal);
+                        initVals.addAll(r.constInitVals);
+                    } else {
+                        initVals.add(0); // 静态变量默认初始化为 0
+                    }
+                    // 创建全局值（全局数据区存储）
+                    staticGlobal = irModule.createGlobalValue(IRType.getInt().dims(varSymbol.varType.dims), initVals);
+                    staticGlobal.setName(staticGlobalName);
+                    staticGlobalMap.put(staticGlobalName, staticGlobal);
                 }
-                // 创建全局值（全局数据区存储）
-                GlobalValue staticGlobal = irModule.createGlobalValue(IRType.getInt().dims(varSymbol.varType.dims), initVals);
-                staticGlobal.setName(currFunction.getName().substring(1) + "_" + varSymbol.ident);
                 varSymbol.targetValue = staticGlobal;
 
                 // 若有显式初始化，生成 store 指令覆盖默认值
                 if (varDef.initVal != null) {
-                    VisitResult r = visitInitVal(varDef.initVal);
+                    //VisitResult r = visitInitVal(varDef.initVal);
                     // 静态局部变量初始化：全局值仅需赋值一次，直接生成 store 到全局值地址
-                    currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
+                    //currBasicBlock.createStoreInst(r.irValues.get(0), varSymbol.targetValue);
                 }
             }else {
                 Value localVar = currFunction.getFirstBasicBlock().createAllocInstAndInsert(IRType.getInt().dims(varSymbol.varType.dims));
@@ -1003,7 +1025,7 @@ public class Visitor {
             BasicBlock firstAndBlock = r2.andBlocks.get(0);
             for (BasicBlock nearAndBlock : r1.nearAndBlocks){
                 BrInst brInst = (BrInst) nearAndBlock.getInstructions().get(nearAndBlock.getInstructions().size() - 1);
-                brInst.setFalseBranch(firstAndBlock);
+                brInst.setFalseBranch(firstAndBlock); // 左为假，执行右表达式
             }
 
             visitResult.nearAndBlocks.addAll(r2.andBlocks);
@@ -1039,13 +1061,14 @@ public class Visitor {
             VisitResult r1 = visitLAndExp(lAndExp.lAndExp);
             BasicBlock lastAndBlock = r1.andBlocks.get(r1.andBlocks.size() - 1);
             BrInst brInLastAndBlock = (BrInst) lastAndBlock.getInstructions().get(lastAndBlock.getInstructions().size() - 1);
-            brInLastAndBlock.setTrueBranch(currBasicBlock);
+            brInLastAndBlock.setTrueBranch(currBasicBlock); // 左为真，执行右表达式
             visitResult.andBlocks.addAll(r1.andBlocks);
 
             VisitResult r2 = visitEqExp(lAndExp.eqExp2);
             if(!(r2.irValue instanceof ICmpInst)){
                 r2.irValue = currBasicBlock.createICmpInst(ICmpInstCond.NE, new ImmediateValue(0), r2.irValue);
             }
+            // 右表达式的分支指令
             currBasicBlock.createBrInstWithCond(r2.irValue, null, null);
             visitResult.andBlocks.add(currBasicBlock);
             currBasicBlock = currFunction.createBasicBlock();
