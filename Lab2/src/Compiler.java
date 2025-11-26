@@ -23,8 +23,8 @@ public class Compiler {
     private static TokenList tokenList = new TokenList();
 
     public static void main(String[] args) throws IOException, ParserException, LexerException {
-        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        //String filePath = "testfile.txt";
+        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        String filePath = "testfile.txt";
         // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
         // 分词器
