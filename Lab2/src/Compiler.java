@@ -12,6 +12,7 @@ import frontend.parser.node.CompUnit;
 import frontend.parser.node.Node;
 import frontend.symtable.SymbolTable;
 import frontend.visitor.Visitor;
+import midend.*;
 
 import java.io.*;
 import java.util.Collections;
@@ -23,8 +24,8 @@ public class Compiler {
     private static TokenList tokenList = new TokenList();
 
     public static void main(String[] args) throws IOException, ParserException, LexerException {
-        //String filePath = Compiler.class.getResource("/testfile.txt").getPath();
-        String filePath = "testfile.txt";
+        String filePath = Compiler.class.getResource("/testfile.txt").getPath();
+        //String filePath = "testfile.txt";
         // 输入的代码文件
         FileInputStream fileInputStream = new FileInputStream(filePath);
         // 分词器
@@ -41,11 +42,11 @@ public class Compiler {
         // 语义分析
         //visit(parser);
 
-        // 中间代码生成一
+        // 代码生成一
         //generateLLVM(parser);
 
-        // 中间代码生成二
-        generateMIPS(parser);
+        // 代码生成二
+        generateMIPS(parser, true );
 
         printError();
     }
@@ -160,7 +161,7 @@ public class Compiler {
         }
     }
 
-    private static void generateMIPS(Parser parser) throws IOException, LexerException, LexerException, ParserException {
+    private static void generateMIPS(Parser parser, boolean optimize) throws IOException, LexerException, LexerException, ParserException {
         try(
                 FileOutputStream fileOutputStream = new FileOutputStream("mips.txt")
         ){
@@ -169,10 +170,32 @@ public class Compiler {
             Visitor visitor = new Visitor(errorRecorder);
             Module module = visitor.generateIR(result);
 
+            if (optimize){
+                module = optimize(module);
+            }
+
             Translator translator = new Translator();
             translator.translate(module);
             translator.getAsmTarget().dump(out, false);
         }
+    }
+
+    private static Module optimize(Module module) {
+        while (true){
+            ConstPropagatePass pass1 = new ConstPropagatePass(module);
+            module = pass1.pass();
+            ConstFoldPass pass2 = new ConstFoldPass(module);
+            module = pass2.pass();
+
+            if (!pass1.isImprove() && !pass2.isImprove()) {
+                break;
+            }
+        }
+        module = new LVNPass(module).pass();
+        module = new DeadStorePass(module).pass();
+        module = new DeadCodePass(module).pass();
+
+        return module;
     }
 
     public static void printError() throws IOException{

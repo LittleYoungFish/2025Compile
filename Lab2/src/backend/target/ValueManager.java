@@ -2,6 +2,9 @@ package backend.target;
 
 import backend.ir.*;
 import backend.ir.inst.*;
+import backend.optimize.ConflictGraph;
+import backend.optimize.ConflictGraphBuilder;
+import midend.LiveVariableAnalyze;
 import backend.target.value.*;
 
 import java.util.*;
@@ -23,6 +26,11 @@ public class ValueManager {
 
     public int putLocal(Function func){
         return graphColorManage(func);
+    }
+
+    private int basicManage(Function func) {
+        var registersName = List.of("s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7");
+        return manageMemory(func, registersName.stream().map(Register.REGS::get).toList(), this::refCountGlobalRegisterManage);
     }
 
     private int manageMemory(Function func, List<Register> registersToAlloc, GlobalRegisterManager globalRegisterManager){
@@ -123,7 +131,75 @@ public class ValueManager {
     }
 
     private void graphColorGlobalRegisterManage(List<Register> registers, List<AllocInst> varInsts, Function func){
+        LiveVariableAnalyze liveVariableAnalyze = new LiveVariableAnalyze(func);
+        liveVariableAnalyze.analyze();
 
+        varInsts = varInsts
+                .stream()
+                .filter(inst -> inst.getDataType().getArrayDims().isEmpty())
+                .toList();
+
+        Map<BasicBlock, Set<AllocInst>> inSets = liveVariableAnalyze.getInSets();
+        Map<BasicBlock, Set<AllocInst>> outSets = liveVariableAnalyze.getOutSets();
+        Map<BasicBlock, Set<AllocInst>> activeSets = new HashMap<>();
+
+        for (BasicBlock block : func.getBasicBlocks()) {
+            Set<AllocInst> activeSet = new HashSet<AllocInst>();
+            activeSets.put(block, activeSet);
+            activeSet.addAll(inSets.get(block));
+            activeSet.addAll(outSets.get(block));
+        }
+
+        ConflictGraph conflictGraph = new ConflictGraphBuilder(varInsts, liveVariableAnalyze.getDefSets(), activeSets).getGraph();
+        ConflictGraph graphForColor = conflictGraph.copy();
+        int degreeThreshold = registers.size();
+        Stack<AllocInst> nodesToColor = new Stack<>();
+
+        while (!graphForColor.isEmpty()){
+            AllocInst candidate = null;
+            for (AllocInst node : graphForColor.getNodes()){
+                if (graphForColor.getConflict(node).size() >= degreeThreshold){
+                    continue;
+                }
+                candidate = node;
+                break;
+            }
+
+            if (candidate == null){
+                int maxDegree = degreeThreshold - 1;
+                for (AllocInst node : graphForColor.getNodes()){
+                    int degree = graphForColor.getConflict(node).size();
+                    if (graphForColor.getConflict(node).size() <= maxDegree){
+                        continue;
+                    }
+                    maxDegree = degree;
+                    candidate = node;
+                    break;
+                }
+            }else {
+                nodesToColor.push(candidate);
+            }
+            graphForColor.removeNode(candidate);
+        }
+
+        while (!nodesToColor.isEmpty()){
+            AllocInst node = nodesToColor.pop();
+            Set<Register> preserveRegs = new HashSet<>();
+
+            for (AllocInst conflictNode : conflictGraph.getConflict(node)){
+                if (localValueMap.containsKey(conflictNode) && localValueMap.get(conflictNode) instanceof Register registerInUse){
+                    preserveRegs.add(registerInUse);
+                }
+            }
+
+            for (Register register : registers){
+                if (preserveRegs.contains(register)){
+                    continue;
+                }
+                localValueMap.put(node, register);
+                break;
+            }
+        }
     }
 
     public void clearLocals(){
@@ -137,4 +213,40 @@ public class ValueManager {
     interface GlobalRegisterManager{
         void manageGlobalRegister(List<Register> registersToAlloc, List<AllocInst> varAllocInsts, Function function);
     }
+
+    private void refCountGlobalRegisterManage(List<Register> registers, List<AllocInst> varInsts, Function function){
+        Stack<Register> registersToAlloc = new Stack<>();
+        registersToAlloc.addAll(registers);
+
+        List<AllocInst> integerVarInsts = varInsts
+                .stream()
+                .filter(inst -> inst.getDataType().getArrayDims().isEmpty())
+                .toList();
+
+        Map<AllocInst, Integer> refCounts = new HashMap<>();
+
+        for (AllocInst inst : integerVarInsts){
+            int refCount = 0;
+            for (Use use : inst.getUseList()){
+                int loopWeight = ((Instruction) use.getUser()).getBasicBlock().getLoopNum();
+                if(loopWeight > 0){
+                    refCount += 5 * loopWeight;
+                }else {
+                    refCount += 1;
+                }
+            }
+            refCounts.put(inst, refCount);
+        }
+
+        ArrayList<AllocInst> varInstOrderedByRef = new ArrayList<>(refCounts.entrySet().stream().sorted(Map.Entry.comparingByValue()).map(Map.Entry::getKey).toList());
+        Collections.reverse(varInstOrderedByRef);
+
+        for (AllocInst inst : varInstOrderedByRef){
+            if (registersToAlloc.isEmpty()){
+                break;
+            }
+            localValueMap.put(inst, registersToAlloc.pop());
+        }
+    }
+
 }
