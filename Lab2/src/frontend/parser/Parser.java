@@ -1121,6 +1121,7 @@ public class Parser {
 
         while (isMatch(currToken, TokenType.AND) || isMatch(currToken, TokenType.SINGLE_AND)){
             if (!isMatch(currToken, TokenType.AND)){
+                // a 类错误
                 errorRecorder.addError(ErrorType.ILLEGAL_SYMBOL, currToken.getLineNum());
             }
             currToken = buf.readNextToken();

@@ -146,6 +146,10 @@ public class VarVisitor extends SubVisitor{
 
                 for (int i = 0; i < irVisitDims.size(); i++){
                     Value visitDim = irVisitDims.get(i);
+                    if (visitDim == null) {
+                        visitResult.irValue = null; // 标记结果无效并跳出
+                        return visitResult;
+                    }
                     List<Value> offsets = (i == dims.size() - 1) ? List.of(visitDim) : List.of(visitDim, new ImmediateValue(0));
                     arrayPtr = getCurrBasicBlock().createGetElementPtrInst(arrayPtr, offsets);
                 }

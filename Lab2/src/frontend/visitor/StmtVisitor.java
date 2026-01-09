@@ -57,7 +57,9 @@ public class StmtVisitor extends SubVisitor{
             }
 
             VisitResult rtExp = getExpVisitor().visitExp(stmt.exp1);
-            getCurrBasicBlock().createStoreInst(rtExp.irValue, rtLVal.irValue);
+            if (getCurrBasicBlock() != null && rtLVal.irValue != null && rtExp.irValue != null) {
+                getCurrBasicBlock().createStoreInst(rtExp.irValue, rtLVal.irValue);
+            }
         }else if (stmt.getUType() == 2){
             // Stmt → [Exp] ';'
             if(stmt.exp2 != null){
@@ -92,11 +94,13 @@ public class StmtVisitor extends SubVisitor{
             lastBlockInTrue.createBrInstWithoutCond(getCurrBasicBlock());
 
             for (BasicBlock blockToTrue : r.blocksToTrue){
+                if (blockToTrue.getInstructions().isEmpty()) continue;
                 BrInst brInst = (BrInst) blockToTrue.getInstructions().get(blockToTrue.getInstructions().size() - 1);
                 brInst.setTrueBranch(trueBlock);
             }
 
             for (BasicBlock blockToFalse : r.blocksToFalse){
+                if (blockToFalse.getInstructions().isEmpty()) continue;
                 BrInst brInst = (BrInst) blockToFalse.getInstructions().get(blockToFalse.getInstructions().size() - 1);
                 brInst.setFalseBranch(falseBlock);
             }
@@ -189,12 +193,20 @@ public class StmtVisitor extends SubVisitor{
                 var result = getExpVisitor().visitExp(stmt.exp3);
                 expIr = result.irValue;
             }
-            getCurrBasicBlock().createReturnInst(expIr);
+            if (getCurrBasicBlock() != null) {
+                // 如果函数是 int 类型但解析结果 expIr 为空（如由于错误 c），补一个 0 防止崩溃
+                if (!isRetExpNotNeed() && expIr == null) {
+                    expIr = new ImmediateValue(0);
+                }
+                getCurrBasicBlock().createReturnInst(expIr);
+            }
         }else if (stmt.getUType() == 8){
             // Stmt -> 'printf''('StringConst {','Exp}')'';'
             List<Value> expValues = new ArrayList<>();
             for (Exp exp : stmt.exps){
-                expValues.add(getExpVisitor().visitExp(exp).irValue);
+                Value val = getExpVisitor().visitExp(exp).irValue;
+                // 如果表达式报错返回 null，补一个 0
+                expValues.add(val != null ? val : new ImmediateValue(0));
             }
 
             // 校验格式化字符串 %d 个数与表达式个数匹配
@@ -204,21 +216,23 @@ public class StmtVisitor extends SubVisitor{
                 return;
             }
 
-            try{
-                for (int i = 1, j = 0; i < stmt.stringConst.length() - 1; i++){
-                    char ch = stmt.stringConst.charAt(i);
-                    if(ch == '%'){
-                        getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTINT, List.of(expValues.get(j++)));
-                        i++;
-                    } else if (ch == '\\') {
-                        getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue('\n')));
-                        i++;
-                    }else {
-                        getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue(ch)));
+            if (getCurrBasicBlock() != null) {
+                try {
+                    for (int i = 1, j = 0; i < stmt.stringConst.length() - 1; i++) {
+                        char ch = stmt.stringConst.charAt(i);
+                        if (ch == '%') {
+                            getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTINT, List.of(expValues.get(j++)));
+                            i++;
+                        } else if (ch == '\\') {
+                            getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue('\n')));
+                            i++;
+                        } else {
+                            getCurrBasicBlock().createCallInst(Function.BUILD_IN_PUTCH, List.of(new ImmediateValue(ch)));
+                        }
                     }
+                } catch (IndexOutOfBoundsException e) {
+                    return;
                 }
-            }catch (IndexOutOfBoundsException e){
-                return;
             }
         }
     }

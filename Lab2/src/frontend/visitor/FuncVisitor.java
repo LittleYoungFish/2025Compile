@@ -61,10 +61,14 @@ public class FuncVisitor extends SubVisitor{
         if (funcDef.funcFParams != null){
             for (int i = getCurrFunction().getArguments().size() - 1; i >= 0; i--){
                 FunctionArgument currArgVal = getCurrFunction().getArguments().get(i);
+
                 Symbol currParamSym = getCurrentSymbolTable().getSymbol(funcDef.funcFParams.funcFParams.get(i).ident);
-                Value currArgPtr = getCurrFunction().getFirstBasicBlock().createAllocInstAndInsert(currArgVal.getType());
-                getCurrBasicBlock().createStoreInst(currArgVal, currArgPtr);
-                currParamSym.targetValue = currArgPtr;
+
+                if (currParamSym != null) {
+                    Value currArgPtr = getCurrFunction().getFirstBasicBlock().createAllocInstAndInsert(currArgVal.getType());
+                    getCurrBasicBlock().createStoreInst(currArgVal, currArgPtr);
+                    currParamSym.targetValue = currArgPtr;
+                }
             }
         }
 
@@ -134,7 +138,7 @@ public class FuncVisitor extends SubVisitor{
         VisitResult visitResult = new VisitResult();
         for(Exp exp : funcRParams.exps){
             VisitResult r = getExpVisitor().visitExp(exp);
-            visitResult.paramTypes.add(r.expType);
+            visitResult.paramTypes.add(r.expType != null ? r.expType : new Type("int"));
             visitResult.irValues.add(r.irValue);
         }
         return visitResult;

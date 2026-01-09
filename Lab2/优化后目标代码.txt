@@ -1,0 +1,358 @@
+.data
+N: .word 10
+a: .word 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+.text
+	la $ra end.end
+	j main
+getint:
+	li     $v0, 5
+	syscall 
+	jr     $ra
+printf:
+	jr     $ra
+fib:
+	addiu  $sp, $sp, -44
+fib.b0:
+	li     $t7, 1
+	seq    $t5, $a0, $t7
+	beqz   $t5, fib.b6
+fib.b5:
+	li     $v0, 1
+	addiu  $sp, $sp, 44
+	jr     $ra
+fib.b6:
+	li     $t7, 2
+	seq    $t5, $a0, $t7
+	beqz   $t5, fib.b10
+fib.b9:
+	li     $v0, 2
+	addiu  $sp, $sp, 44
+	jr     $ra
+fib.b10:
+	li     $t7, 1
+	subu   $t5, $a0, $t7
+	sw     $t5, 20($sp)
+	addiu  $sp, $sp, -12
+	sw     $ra, 4($sp)
+	sw     $a0, 8($sp)
+	move   $a0, $t5
+	jal    fib
+	lw     $ra, 4($sp)
+	lw     $a0, 8($sp)
+	addiu  $sp, $sp, 12
+	move   $t5, $v0
+	li     $t7, 2
+	subu   $t1, $a0, $t7
+	sw     $t5, 16($sp)
+	sw     $t1, 8($sp)
+	addiu  $sp, $sp, -12
+	sw     $ra, 4($sp)
+	sw     $a0, 8($sp)
+	move   $a0, $t1
+	jal    fib
+	lw     $ra, 4($sp)
+	lw     $a0, 8($sp)
+	addiu  $sp, $sp, 12
+	move   $t5, $v0
+	lw     $t1, 16($sp)
+	addu   $s5, $t1, $t5
+	move   $v0, $s5
+	addiu  $sp, $sp, 44
+	jr     $ra
+main:
+	addiu  $sp, $sp, -312
+main.b18:
+	addiu  $sp, $sp, -16
+	sw     $ra, 0($sp)
+	sw     $s0, 4($sp)
+	sw     $s2, 8($sp)
+	sw     $s1, 12($sp)
+	jal    getint
+	lw     $ra, 0($sp)
+	lw     $s0, 4($sp)
+	lw     $s2, 8($sp)
+	lw     $s1, 12($sp)
+	addiu  $sp, $sp, 16
+	move   $t5, $v0
+	move   $s1, $t5
+	sw     $t5, 308($sp)
+	addiu  $sp, $sp, -16
+	sw     $ra, 0($sp)
+	sw     $s0, 4($sp)
+	sw     $s2, 8($sp)
+	sw     $s1, 12($sp)
+	jal    getint
+	lw     $ra, 0($sp)
+	lw     $s0, 4($sp)
+	lw     $s2, 8($sp)
+	lw     $s1, 12($sp)
+	addiu  $sp, $sp, 16
+	move   $t5, $v0
+	move   $s2, $t5
+	mul    $t1, $s1, $s2
+	li     $s5, 0
+	subu   $s5, $s5, $t1
+	sw     $t5, 304($sp)
+	sw     $t1, 292($sp)
+	sw     $s5, 288($sp)
+	addiu  $sp, $sp, -20
+	sw     $ra, 4($sp)
+	sw     $s0, 8($sp)
+	sw     $s2, 12($sp)
+	sw     $s1, 16($sp)
+	li     $a0, 4
+	jal    fib
+	lw     $ra, 4($sp)
+	lw     $s0, 8($sp)
+	lw     $s2, 12($sp)
+	lw     $s1, 16($sp)
+	addiu  $sp, $sp, 20
+	move   $t5, $v0
+	lw     $t1, 288($sp)
+	mul    $s5, $t1, $t5
+	la     $t3, a
+	move   $t0, $t3
+	li     $t7, 1
+	mul    $t7, $t7, 4
+	addu   $t0, $t0, $t7
+	lw     $t6, 0($t0)
+	addu   $t4, $s5, $t6
+	li     $t7, 5
+	div    $t4, $t7
+	mflo   $s3
+	move   $s1, $s3
+	sw     $t1, 288($sp)
+	sw     $t5, 284($sp)
+	sw     $t3, 276($sp)
+	sw     $t0, 272($sp)
+	sw     $s5, 280($sp)
+	sw     $t6, 268($sp)
+	sw     $t4, 264($sp)
+	sw     $s3, 260($sp)
+	addiu  $sp, $sp, -20
+	sw     $ra, 4($sp)
+	sw     $s0, 8($sp)
+	sw     $s2, 12($sp)
+	sw     $s1, 16($sp)
+	li     $a0, 5
+	jal    fib
+	lw     $ra, 4($sp)
+	lw     $s0, 8($sp)
+	lw     $s2, 12($sp)
+	lw     $s1, 16($sp)
+	addiu  $sp, $sp, 20
+	move   $t5, $v0
+	li     $t7, 2
+	addu   $t1, $t5, $t7
+	sw     $t5, 256($sp)
+	sw     $t1, 252($sp)
+	addiu  $sp, $sp, -20
+	sw     $ra, 4($sp)
+	sw     $s0, 8($sp)
+	sw     $s2, 12($sp)
+	sw     $s1, 16($sp)
+	move   $a0, $t1
+	jal    fib
+	lw     $ra, 4($sp)
+	lw     $s0, 8($sp)
+	lw     $s2, 12($sp)
+	lw     $s1, 16($sp)
+	addiu  $sp, $sp, 20
+	move   $t5, $v0
+	li     $t1, 1197
+	subu   $t1, $t1, $t5
+	li     $t7, -10091
+	addu   $s5, $t1, $t7
+	move   $s2, $s5
+	li     $t7, -6
+	move   $s0, $t7
+	lw     $t0, 276($sp)
+	move   $t3, $t0
+	lw     $t6, 0($t3)
+	mul    $t4, $s1, $s1
+	addu   $s3, $t6, $t4
+	sw     $s3, 0($t3)
+	lw     $s4, 272($sp)
+	lw     $t2, 0($s4)
+	mul    $s6, $s1, $s1
+	addu   $s7, $t2, $s6
+	sw     $s7, 0($s4)
+	sw     $t5, 248($sp)
+	move   $t5, $t0
+	li     $t7, 2
+	mul    $t7, $t7, 4
+	addu   $t5, $t5, $t7
+	sw     $t1, 244($sp)
+	lw     $t1, 0($t5)
+	sw     $s5, 240($sp)
+	mul    $s5, $s1, $s1
+	sw     $t6, 232($sp)
+	addu   $t6, $t1, $s5
+	sw     $t6, 0($t5)
+	sw     $t4, 224($sp)
+	move   $t4, $t0
+	li     $t7, 3
+	mul    $t7, $t7, 4
+	addu   $t4, $t4, $t7
+	sw     $t3, 236($sp)
+	lw     $t3, 0($t4)
+	sw     $s3, 220($sp)
+	mul    $s3, $s1, $s1
+	sw     $t2, 216($sp)
+	addu   $t2, $t3, $s3
+	sw     $t2, 0($t4)
+	sw     $s6, 208($sp)
+	move   $s6, $t0
+	li     $t7, 4
+	mul    $t7, $t7, 4
+	addu   $s6, $s6, $t7
+	sw     $s4, 272($sp)
+	lw     $s4, 0($s6)
+	sw     $s7, 204($sp)
+	mul    $s7, $s1, $s1
+	sw     $t1, 196($sp)
+	addu   $t1, $s4, $s7
+	sw     $t1, 0($s6)
+	sw     $s5, 188($sp)
+	move   $s5, $t0
+	li     $t7, 5
+	mul    $t7, $t7, 4
+	addu   $s5, $s5, $t7
+	sw     $t5, 200($sp)
+	lw     $t5, 0($s5)
+	sw     $t6, 184($sp)
+	mul    $t6, $s1, $s1
+	sw     $t3, 176($sp)
+	addu   $t3, $t5, $t6
+	sw     $t3, 0($s5)
+	sw     $s3, 168($sp)
+	move   $s3, $t0
+	li     $t7, 6
+	mul    $t7, $t7, 4
+	addu   $s3, $s3, $t7
+	sw     $t4, 180($sp)
+	lw     $t4, 0($s3)
+	sw     $t2, 164($sp)
+	mul    $t2, $s1, $s1
+	sw     $s4, 156($sp)
+	addu   $s4, $t4, $t2
+	sw     $s4, 0($s3)
+	sw     $s7, 148($sp)
+	move   $s7, $t0
+	li     $t7, 7
+	mul    $t7, $t7, 4
+	addu   $s7, $s7, $t7
+	sw     $s6, 160($sp)
+	lw     $s6, 0($s7)
+	sw     $t1, 144($sp)
+	mul    $t1, $s1, $s1
+	sw     $t5, 136($sp)
+	addu   $t5, $s6, $t1
+	sw     $t5, 0($s7)
+	sw     $t6, 128($sp)
+	move   $t6, $t0
+	li     $t7, 8
+	mul    $t7, $t7, 4
+	addu   $t6, $t6, $t7
+	sw     $s5, 140($sp)
+	lw     $s5, 0($t6)
+	sw     $t3, 124($sp)
+	mul    $t3, $s1, $s1
+	sw     $t4, 116($sp)
+	addu   $t4, $s5, $t3
+	sw     $t4, 0($t6)
+	sw     $t2, 108($sp)
+	move   $t2, $t0
+	li     $t7, 9
+	mul    $t7, $t7, 4
+	addu   $t2, $t2, $t7
+	sw     $s3, 120($sp)
+	lw     $s3, 0($t2)
+	sw     $s4, 104($sp)
+	mul    $s4, $s1, $s1
+	sw     $s6, 96($sp)
+	addu   $s6, $s3, $s4
+	sw     $s6, 0($t2)
+	li     $t7, 0
+	move   $s1, $t7
+main.b91:
+	li     $t7, 10
+	slt    $t5, $s1, $t7
+	beqz   $t5, main.b95
+main.b94:
+	la     $t5, a
+	move   $t1, $t5
+	mul    $t7, $s1, 4
+	addu   $t1, $t1, $t7
+	lw     $s5, 0($t1)
+	li     $v0, 1
+	move   $t7, $a0
+	move   $a0, $s5
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 44
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 32
+	syscall 
+	move   $a0, $t7
+	li     $t7, 1
+	addu   $t3, $s1, $t7
+	move   $s1, $t3
+main.b102:
+	j      main.b91
+main.b95:
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 10
+	syscall 
+	move   $a0, $t7
+	li     $v0, 1
+	move   $t7, $a0
+	move   $a0, $s1
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 44
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 32
+	syscall 
+	move   $a0, $t7
+	li     $v0, 1
+	move   $t7, $a0
+	move   $a0, $s2
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 44
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 32
+	syscall 
+	move   $a0, $t7
+	li     $v0, 1
+	move   $t7, $a0
+	move   $a0, $s0
+	syscall 
+	move   $a0, $t7
+	li     $v0, 11
+	move   $t7, $a0
+	li     $a0, 10
+	syscall 
+	move   $a0, $t7
+	li     $v0, 0
+	addiu  $sp, $sp, 312
+	jr     $ra
+end.end:

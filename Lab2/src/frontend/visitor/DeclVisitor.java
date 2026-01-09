@@ -190,6 +190,8 @@ public class DeclVisitor extends SubVisitor{
                             }
 
                             Value initValue = initValues.get(i);
+                            // 防御性编程：如果初值解析失败（为null），跳过指令生成，防止后端崩溃
+                            if (initValue == null) continue;
                             Value arrayPtr = getCurrBasicBlock().createGetElementPtrInst(varSymbol.targetValue, List.of(new ImmediateValue(0), new ImmediateValue(0)));
                             for (int j = 0; j < indexs.length; j++) {
                                 int visitIdx = indexs[j];
